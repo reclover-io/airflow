@@ -1,0 +1,29 @@
+[Batch run]
+
+- bash.sh generate script python
+- แยกไฟล์ Python (ทำเป็น component)
+- กรณีต้องการ Run 3 เดือน โดยรันเดือนละ 1 ครั้ง ต้องกำหนด Start Date, End date
+
+{กรณี pause}
+- กด run ธรรมดาให้เช็คจาก table ว่ารันถึงไหนแล้ว
+- กด run with config ให้อ่าน config
+- pause อัตโนมัติตอน 7 โมง ให้สามารถกด run manual ต่อเองได้ หรือ run อัตโนมัติต่อได้
+
+1. Fetch API Kong
+- Fetch API Kong limit hits 10000 record
+- If total_records > 10000 ใช้ search_after และนำ time and _id และ total_records ของ record ล่าสุดมาใส่ใน request body เพื่อขึ้น page ต่อไป
+- If pause ให้ stamp time และ _id ของ record ล่าสุดไว้
+- เมื่อ resume ให้นำ time และ _id ของ record ล่าสุดมาใช้ใน search_after ต่อ
+- กรณีเกิด error
+	- กรณีรอบแรก run แล้ว hits เป็นค่าว่างหรือเป็น 0
+	- กรณี total_records > 10000 แล้วเกิด error หรือ hits เป็นค่าว่างหรือเป็น 0 โดยยังไม่จบ page
+
+2. CSV
+- สร้าง csv file ที่เป็น Temp ขึ้นมา หากรันจบให้ Save ไว้ที่ใดสักที่ ถ้า success ให้ลบ temp ออก
+
+3. Noti
+- Noti Error ด้วย
+- Noti ตอนเริ่ม Run Batch ด้วย
+
+{log}
+- dag id, start_time, total_all, total_run, lasted_id, lasted_time, filename
