@@ -13,8 +13,8 @@ from airflow.utils.state import State
 from sqlalchemy.exc import IntegrityError
 
 # Define constants
-OUTPUT_DIR = "/output"
-TEMP_DIR = "/output/temp"
+OUTPUT_DIR = "/opt/airflow/output"
+TEMP_DIR = "/opt/airflow/output/temp"
 MAX_RECORDS_PER_REQUEST =  10000
 API_URL = 'http://34.124.138.144:8000/api/common/authentication/test'
 HEADERS = {
