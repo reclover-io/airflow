@@ -1919,7 +1919,7 @@ def get_output_config(conf: Dict, dag_id: str) -> Tuple[str, str]:
 
 # Create the DAG
 with DAG(
-    'batch_api_to_csv_with_dynamic_dates_backup',
+    'batch_api_to_csv_with_dynamic_dates',
     default_args=default_args,
     description='Fetch API data with date range and save to CSV',
     schedule_interval=None,
