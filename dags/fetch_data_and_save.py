@@ -42,6 +42,7 @@ API_HEADERS = {
 # Output Configuration
 OUTPUT_DIR = '/opt/airflow/output'
 TEMP_DIR = '/opt/airflow/output/temp'
+CONTROL_DIR = '/opt/airflow/output/control'
 DB_CONNECTION = 'postgresql+psycopg2://airflow:airflow@postgres:5432/airflow'
 
 DEFAULT_CSV_COLUMNS = [
@@ -60,7 +61,6 @@ class NoDataException(Exception):
 def get_thai_time() -> datetime:
     """Get current time in Thai timezone"""
     return datetime.now(THAI_TZ)
-
 
 def format_thai_time(dt: datetime) -> str:
     """Format datetime to Thai timezone string without timezone info"""
@@ -365,22 +365,30 @@ def save_batch_state(batch_id: str, run_id: str, start_date: str, end_date: str,
                     status: str, error_message: Optional[str] = None,
                     total_records: Optional[int] = None,
                     fetched_records: Optional[int] = None,
-                    target_pause_time: Optional[str] = None):
+                    target_pause_time: Optional[str] = None,
+                    initial_start_time: Optional[datetime] = None):
     """Save batch state to database"""
     try:
         with get_db_connection() as conn:
+            # ตรวจสอบว่ามี state เดิมหรือไม่
+            existing_state = get_batch_state(batch_id, run_id)
+            
+            # ถ้าไม่มี state เดิมและไม่ได้ระบุ initial_start_time ให้ใช้เวลาปัจจุบัน
+            if not existing_state and initial_start_time is None:
+                initial_start_time = get_thai_time()
+            
             query = text("""
                 INSERT INTO batch_states (
                     batch_id, run_id, start_date, end_date, current_page, 
                     last_search_after, status, error_message, 
                     total_records, fetched_records, updated_at,
-                    target_pause_time
+                    target_pause_time, initial_start_time
                 ) VALUES (
                     :batch_id, :run_id, :start_date, :end_date, :current_page, 
                     :last_search_after, :status, :error_message,
                     :total_records, :fetched_records, 
                     timezone('Asia/Bangkok', NOW()),
-                    :target_pause_time
+                    :target_pause_time, :initial_start_time
                 )
                 ON CONFLICT (batch_id, run_id) 
                 DO UPDATE SET 
@@ -391,6 +399,7 @@ def save_batch_state(batch_id: str, run_id: str, start_date: str, end_date: str,
                     total_records = EXCLUDED.total_records,
                     fetched_records = EXCLUDED.fetched_records,
                     target_pause_time = EXCLUDED.target_pause_time,
+                    initial_start_time = COALESCE(batch_states.initial_start_time, EXCLUDED.initial_start_time),
                     updated_at = timezone('Asia/Bangkok', NOW())
             """)
             
@@ -407,7 +416,8 @@ def save_batch_state(batch_id: str, run_id: str, start_date: str, end_date: str,
                 'error_message': str(error_message) if error_message is not None else None,
                 'total_records': int(total_records) if total_records is not None else None,
                 'fetched_records': int(fetched_records) if fetched_records is not None else None,
-                'target_pause_time': target_pause_time
+                'target_pause_time': target_pause_time,
+                'initial_start_time': initial_start_time
             })
             
     except Exception as e:
@@ -518,28 +528,52 @@ def format_running_message(dag_id: str, run_id: str, start_time: datetime, conf:
         </ul>
     """
 
-def format_success_message(dag_id: str, run_id: str, start_time: datetime, end_time: datetime, conf: Dict, filename: str, batch_state: Optional[Dict] = None) -> str:
+def format_success_message(dag_id: str, run_id: str, current_time: datetime, 
+                         conf: Dict, csv_filename: str, control_filename: str,
+                         batch_state: Optional[Dict] = None) -> str:
     """Format success notification message with processing details"""
-    # Get processing information
-    fetched_records = batch_state.get('fetched_records', 0) if batch_state else 0
-    total_records = batch_state.get('total_records', 0) if batch_state else 0
+    # Get initial start time
+    start_time = get_initial_start_time(dag_id, run_id)
+    if not start_time:
+        start_time = current_time  # Fallback to current time if no initial time found
+        
+    # Ensure both times are in Thai timezone
+    if current_time.tzinfo is None:
+        current_time = THAI_TZ.localize(current_time)
+    else:
+        current_time = current_time.astimezone(THAI_TZ)
+        
+    if start_time.tzinfo is None:
+        start_time = THAI_TZ.localize(start_time)
+    else:
+        start_time = start_time.astimezone(THAI_TZ)
     
-    # Calculate elapsed time
-    elapsed_time = end_time - start_time
+    # Calculate elapsed time from initial start
+    elapsed_time = current_time - start_time
+    
+    # Ensure elapsed time is positive
+    if elapsed_time.total_seconds() < 0:
+        print(f"Warning: Negative elapsed time detected. Start: {start_time}, Current: {current_time}")
+        elapsed_time = abs(elapsed_time)
+    
     hours, remainder = divmod(int(elapsed_time.total_seconds()), 3600)
     minutes, seconds = divmod(remainder, 60)
     elapsed_str = f"{hours}h {minutes}m {seconds}s"
     
+    # Get progress information
+    fetched_records = batch_state.get('fetched_records', 0) if batch_state else 0
+    
     # Calculate processing rate
-    processing_rate = (fetched_records/elapsed_time.total_seconds()) if elapsed_time.total_seconds() > 0 else 0
+    total_seconds = elapsed_time.total_seconds()
+    processing_rate = (fetched_records / total_seconds) if total_seconds > 0 else 0
     
     return f"""
         <h2>Batch Process {dag_id} Has Completed Successfully</h2>
         <p><strong>Batch Process:</strong> {dag_id}</p>
         <p><strong>Run ID:</strong> {run_id}</p>
         <p><strong>Start Time:</strong> {format_thai_time(start_time)}</p>
-        <p><strong>End Time:</strong> {format_thai_time(end_time)}</p>
-        <p><strong>Elapsed Time:</strong> {elapsed_str}</p>
+        <p><strong>End Time:</strong> {format_thai_time(current_time)}</p>
+        <p><strong>Total Elapsed Time:</strong> {elapsed_str}</p>
         <p><strong>Status:</strong> Completed</p>
         
         <h3>Processing Summary:</h3>
@@ -550,7 +584,8 @@ def format_success_message(dag_id: str, run_id: str, start_time: datetime, end_t
         
         <h3>Output Information:</h3>
         <ul>
-            <li>CSV Filename: {filename}</li>
+            <li>CSV Filename: {csv_filename}</li>
+            <li>Control Filename: {control_filename}</li>
         </ul>
         
         <h3>Batch Configuration:</h3>
@@ -934,6 +969,36 @@ def format_manual_pause_message(dag_id: str, run_id: str, start_time: datetime,
         <p><em>Note: To resume this process, please run the batch again with the same Run ID.</em></p>
     """
 
+def get_initial_start_time(batch_id: str, run_id: str) -> Optional[datetime]:
+    """
+    Get the initial start time of the batch from batch_states
+    Returns time in Thai timezone
+    """
+    with get_db_connection() as conn:
+        query = text("""
+            SELECT created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Bangkok'
+            FROM batch_states
+            WHERE batch_id = :batch_id 
+            AND run_id = :run_id
+            ORDER BY created_at ASC
+            LIMIT 1
+        """)
+        
+        result = conn.execute(query, {
+            'batch_id': batch_id,
+            'run_id': run_id
+        }).fetchone()
+        
+        if result and result[0]:
+            # ตรวจสอบว่าเวลาที่ได้มา timezone หรือไม่
+            if result[0].tzinfo is None:
+                # ถ้าไม่มี timezone ให้เพิ่ม Thai timezone
+                return THAI_TZ.localize(result[0])
+            else:
+                # ถ้ามี timezone อยู่แล้ว ให้แปลงเป็น Thai timezone
+                return result[0].astimezone(THAI_TZ)
+        return None
+
 def get_notification_recipients(conf: Dict, notification_type: str) -> List[str]:
     """
     Get email recipients based on notification type
@@ -950,6 +1015,77 @@ def get_notification_recipients(conf: Dict, notification_type: str) -> List[str]
         return success_recipients
     else:
         return all_recipients
+    
+def get_control_file_config(conf: Dict, dag_id: str, timestamp: datetime) -> Tuple[str, str]:
+    """
+    Get control file path and name configuration
+    Returns (control_path, control_filename)
+    """
+    # ใช้ path จาก config หรือใช้ default
+    control_path = conf.get('controlPath', CONTROL_DIR)
+    
+    # สร้าง directory ถ้ายังไม่มี
+    os.makedirs(control_path, exist_ok=True)
+    
+    # ใช้ template จาก config หรือใช้ default
+    control_template = conf.get('controlName')
+    if control_template:
+        control_filename = get_formatted_filename(control_template, dag_id, timestamp)
+        # เปลี่ยนนามสกุลไฟล์เป็น .ctrl
+        control_filename = os.path.splitext(control_filename)[0] + '.ctrl'
+    else:
+        # ใช้ default format
+        control_filename = f"{dag_id}_{timestamp.strftime('%Y%m%d%H%M%S')}.ctrl"
+    
+    return control_path, control_filename
+
+def create_control_file(start_date: str, total_records: int, csv_filename: str,
+                       dag_id: str, conf: Dict) -> Tuple[str, str]:
+    """
+    Create control file with summary information
+    Returns (control_path, control_filename)
+    """
+    try:
+        # แปลง start_date เป็น data_dt (เอาเฉพาะวันที่)
+        data_dt = datetime.strptime(start_date.split()[0], '%Y-%m-%d').strftime('%Y-%m-%d')
+        
+        # ใช้เวลาปัจจุบันเป็น process_date
+        process_time = get_thai_time()
+        process_date = process_time.strftime('%Y-%m-%d %H:%M:%S')
+        
+        # Get control file configuration
+        control_path, control_filename = get_control_file_config(conf, dag_id, process_time)
+        
+        # สร้าง DataFrame สำหรับ control file
+        control_data = {
+            'data_dt': [data_dt],
+            'total_recs': [total_records],
+            'process_date': [process_date],
+            'file_name': [csv_filename]
+        }
+        control_df = pd.DataFrame(control_data)
+        
+        # กำหนด path เต็ม
+        full_path = os.path.join(control_path, control_filename)
+        
+        # บันทึกไฟล์ control
+        control_df.to_csv(
+            full_path,
+            sep='|',
+            index=False,
+            quoting=csv.QUOTE_MINIMAL,
+            escapechar='\\',
+            doublequote=True
+        )
+        
+        print(f"Created control file: {full_path}")
+        print(f"Control file content:")
+        print(control_df.to_string(index=False))
+        
+        return control_path, control_filename
+        
+    except Exception as e:
+        raise AirflowException(f"Error creating control file: {str(e)}")
 
 def get_csv_columns(conf: Dict) -> List[str]:
     """
@@ -1347,7 +1483,7 @@ def process_data(**context):
         dag_run = context['dag_run']
         conf = dag_run.conf or {}
         
-        # Validate all configuration
+        # Validate configuration
         is_valid, error_message = validate_config(conf)
         if not is_valid:
             print(f"Configuration validation failed: {error_message}")
@@ -1379,14 +1515,29 @@ def process_data(**context):
                 conf=conf
             )
             
-            ti.xcom_push(key='process_result', value=result)
-            
             if isinstance(result, dict) and result.get('status') == 'paused':
                 return result
             
-            output_path, filename = result
-            ti.xcom_push(key='output_filename', value=filename)
-            return (output_path, filename)
+            output_path, csv_filename = result
+            ti.xcom_push(key='output_filename', value=csv_filename)
+            
+            # Get batch state for total records
+            batch_state = get_batch_state(dag_run.dag_id, run_id)
+            total_records = batch_state.get('total_records', 0) if batch_state else 0
+            
+            # Create control file
+            control_path, control_filename = create_control_file(
+                start_date=start_date,
+                total_records=total_records,
+                csv_filename=csv_filename,
+                dag_id=dag_run.dag_id,
+                conf=conf
+            )
+            
+            # Store control filename in XCom
+            ti.xcom_push(key='control_filename', value=control_filename)
+            
+            return (output_path, csv_filename, control_path, control_filename)
             
         except Exception as e:
             error_msg = str(e)
@@ -1398,8 +1549,6 @@ def process_data(**context):
         ti.xcom_push(key='error_message', value=error_msg)
         raise AirflowException(error_msg)
 
-
-
 def send_success_notification(**context):
     """Send success notification"""
     ti = context['task_instance']
@@ -1407,16 +1556,46 @@ def send_success_notification(**context):
     dag_id = dag_run.dag_id
     run_id = dag_run.run_id
     conf = dag_run.conf or {}
-    filename = ti.xcom_pull(key='output_filename')
+    
+    # Get process result
+    process_result = ti.xcom_pull(task_ids='process_data')
+    
+    if isinstance(process_result, tuple) and len(process_result) == 4:
+        # Unpack the result (output_path, csv_filename, control_path, control_filename)
+        _, csv_filename, _, control_filename = process_result
+    else:
+        # Fallback to old format or handle error
+        csv_filename = ti.xcom_pull(key='output_filename')
+        control_filename = ti.xcom_pull(key='control_filename', default='Not available')
+    
+    # Get batch state for progress information and initial start time
     batch_state = get_batch_state(dag_id, run_id)
     
-    start_time_str = ti.xcom_pull(key='batch_start_time')
-    start_time = datetime.fromisoformat(start_time_str)
+    if batch_state and batch_state.get('initial_start_time'):
+        # Use initial_start_time from batch state
+        if isinstance(batch_state['initial_start_time'], str):
+            start_time = datetime.fromisoformat(
+                batch_state['initial_start_time'].replace('Z', '+00:00')
+            )
+        else:
+            start_time = batch_state['initial_start_time']
+    else:
+        # Fallback to XCom if initial_start_time not available
+        start_time_str = ti.xcom_pull(key='batch_start_time')
+        start_time = datetime.fromisoformat(start_time_str)
+    
     end_time = get_thai_time()
     
+    # Format success message with both CSV and control file information
     subject = f"Batch Process {dag_id} Completed Successfully"
     html_content = format_success_message(
-        dag_id, run_id, start_time, end_time, conf, filename, batch_state
+        dag_id, 
+        run_id,
+        end_time, 
+        conf, 
+        csv_filename,
+        control_filename,
+        batch_state
     )
     
     # Send success notification to both groups
