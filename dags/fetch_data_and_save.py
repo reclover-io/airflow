@@ -100,6 +100,7 @@ def ensure_batch_states_table_exists():
                         total_records INTEGER,
                         fetched_records INTEGER,
                         target_pause_time TIMESTAMP WITH TIME ZONE,
+                        initial_start_time TIMESTAMP WITH TIME ZONE,
                         created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT timezone('Asia/Bangkok', NOW()),
                         updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT timezone('Asia/Bangkok', NOW()),
                         PRIMARY KEY (batch_id, run_id)
@@ -117,29 +118,34 @@ def ensure_batch_states_table_exists():
             else:
                 print("batch_states table already exists")
                 
-                # Check if target_pause_time column exists
+                # Check if initial_start_time column exists
                 check_column_query = text("""
                     SELECT EXISTS (
                         SELECT FROM information_schema.columns 
                         WHERE table_name = 'batch_states' 
-                        AND column_name = 'target_pause_time'
+                        AND column_name = 'initial_start_time'
                     );
                 """)
                 
                 column_exists = connection.execute(check_column_query).scalar()
                 
                 if not column_exists:
-                    print("Adding target_pause_time column...")
+                    print("Adding initial_start_time column...")
                     add_column_query = text("""
                         ALTER TABLE batch_states 
-                        ADD COLUMN target_pause_time TIMESTAMP WITH TIME ZONE;
+                        ADD COLUMN initial_start_time TIMESTAMP WITH TIME ZONE;
+
+                        -- Update existing rows to set initial_start_time to created_at
+                        UPDATE batch_states 
+                        SET initial_start_time = created_at 
+                        WHERE initial_start_time IS NULL;
                     """)
                     
                     connection.execute(add_column_query)
                     connection.execute(text("COMMIT;"))
-                    print("target_pause_time column added successfully")
+                    print("initial_start_time column added successfully")
                 else:
-                    print("target_pause_time column already exists")
+                    print("initial_start_time column already exists")
                     
     except Exception as e:
         print(f"Error ensuring table exists: {str(e)}")
@@ -1919,7 +1925,7 @@ def get_output_config(conf: Dict, dag_id: str) -> Tuple[str, str]:
 
 # Create the DAG
 with DAG(
-    'batch_api_to_csv_with_dynamic_dates',
+    'batch_api_to_csv_with_dynamic_dates_backup',
     default_args=default_args,
     description='Fetch API data with date range and save to CSV',
     schedule_interval=None,
@@ -1977,3 +1983,4 @@ with DAG(
     
     # กำหนด Dependencies
     create_table_task >> running_notification >> process_task >> check_pause_task >> [success_notification, failure_notification]
+    
