@@ -890,7 +890,16 @@ def validate_email_config(conf: Dict) -> Tuple[bool, Optional[str]]:
     Validate email configurations
     Returns (is_valid, error_message)
     """
-    # ตรวจสอบ email หลัก
+    email_types = {
+        'email': 'Main email',
+        'emailSuccess': 'Success email',
+        'emailFail': 'Failure email',
+        'emailPause': 'Pause email',
+        'emailResume': 'Resume email',
+        'emailStart': 'Start email'
+    }
+    
+    # ตรวจสอบ email หลัก (required)
     main_emails = conf.get('email', [])
     if not main_emails:
         return False, "Main email addresses are required"
@@ -901,14 +910,18 @@ def validate_email_config(conf: Dict) -> Tuple[bool, Optional[str]]:
     if not validate_email_list(main_emails):
         return False, "Invalid main email address format"
     
-    # ตรวจสอบ emailSuccess (ถ้ามี)
-    success_emails = conf.get('emailSuccess', [])
-    if success_emails:
-        if not isinstance(success_emails, list):
-            return False, "Success email configuration must be a list"
-        
-        if not validate_email_list(success_emails):
-            return False, "Invalid success email address format"
+    # ตรวจสอบ email ประเภทอื่นๆ (optional)
+    for email_key, email_desc in email_types.items():
+        if email_key == 'email':
+            continue  # ข้ามการตรวจสอบ email หลักเพราะตรวจไปแล้ว
+            
+        email_list = conf.get(email_key, [])
+        if email_list:
+            if not isinstance(email_list, list):
+                return False, f"{email_desc} configuration must be a list"
+            
+            if not validate_email_list(email_list):
+                return False, f"Invalid {email_desc.lower()} address format"
     
     return True, None
 
@@ -1008,19 +1021,40 @@ def get_initial_start_time(batch_id: str, run_id: str) -> Optional[datetime]:
 def get_notification_recipients(conf: Dict, notification_type: str) -> List[str]:
     """
     Get email recipients based on notification type
-    notification_type: 'success' | 'normal'
+    notification_type: 'success' | 'normal' | 'fail' | 'pause' | 'resume' | 'start'
+    Returns combined list of recipients for the specified type
     """
+    # Get default recipients
     all_recipients = conf.get('email', [])
     if not isinstance(all_recipients, list):
         all_recipients = [all_recipients]
     
     if notification_type == 'success':
+        # Special handling for success notifications
         success_recipients = conf.get('emailSuccess', [])
         if not isinstance(success_recipients, list):
             success_recipients = [success_recipients]
         return success_recipients
-    else:
-        return all_recipients
+    
+    # Get type-specific recipients
+    type_map = {
+        'fail': 'emailFail',
+        'pause': 'emailPause',
+        'resume': 'emailResume',
+        'start': 'emailStart'
+    }
+    
+    if notification_type in type_map:
+        type_recipients = conf.get(type_map[notification_type], [])
+        if not isinstance(type_recipients, list):
+            type_recipients = [type_recipients]
+        
+        # Combine with default recipients
+        combined_recipients = list(set(all_recipients + type_recipients))
+        return combined_recipients
+    
+    # Return default recipients for unspecified types
+    return all_recipients
     
 def get_control_file_config(conf: Dict, dag_id: str, timestamp: datetime) -> Tuple[str, str]:
     """
@@ -1433,7 +1467,6 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
 def send_notification(subject: str, html_content: str, conf: Dict, notification_type: str):
     """
     Send notification to appropriate recipients based on type
-    notification_type: 'success' | 'normal'
     """
     recipients = get_notification_recipients(conf, notification_type)
     if not recipients:
@@ -1442,12 +1475,12 @@ def send_notification(subject: str, html_content: str, conf: Dict, notification_
     
     try:
         send_email_notification(recipients, subject, html_content)
-        print(f"Notification sent to: {recipients}")
+        print(f"Notification sent to {notification_type} recipients: {recipients}")
     except Exception as e:
-        print(f"Failed to send notification: {str(e)}")
+        print(f"Failed to send {notification_type} notification: {str(e)}")
     
 def send_running_notification(**context):
-    """Send notification when DAG starts running"""
+    """Send notification when DAG starts running or resumes"""
     dag_run = context['dag_run']
     dag_id = dag_run.dag_id
     run_id = dag_run.run_id
@@ -1463,13 +1496,16 @@ def send_running_notification(**context):
         print(f"Found previous state with status: {previous_state.get('status')}")
         subject = f"Batch Process {dag_id} Resumed at {format_thai_time(start_time)}"
         html_content = format_resume_message(dag_id, run_id, start_time, conf, previous_state)
+        
+        # Send resume notification
+        send_notification(subject, html_content, conf, 'resume')
     else:
         print("No previous state found, sending start notification")
         subject = f"Batch Process {dag_id} Started at {format_thai_time(start_time)}"
         html_content = format_running_message(dag_id, run_id, start_time, conf)
-    
-    # Send to normal recipients only
-    send_notification(subject, html_content, conf, 'normal')
+        
+        # Send start notification
+        send_notification(subject, html_content, conf, 'start')
 
 def handle_task_failure(context, pause_exception_class):
     """Handle task failure and determine if retry is needed"""
@@ -1648,13 +1684,21 @@ def send_failure_notification(**context):
         html_content = format_manual_pause_message(
             dag_id, run_id, start_time, end_time, conf, batch_state
         )
+        
+        # Send manual pause notification
+        send_notification(subject, html_content, conf, 'pause')
+        
     elif isinstance(process_result, dict) and process_result.get('status') == 'paused':
-        # Regular pause case
+        # Regular pause case (time-based pause)
         pause_message = process_result.get('message', 'Process was paused')
         subject = f"Batch Process {dag_id} Has Been Paused"
         html_content = format_pause_message(
             dag_id, run_id, start_time, end_time, pause_message, conf, batch_state
         )
+        
+        # Send regular pause notification
+        send_notification(subject, html_content, conf, 'pause')
+        
     else:
         # Error case
         error_message = error_message or "Unknown error"
@@ -1662,9 +1706,9 @@ def send_failure_notification(**context):
         html_content = format_error_message(
             dag_id, run_id, start_time, end_time, error_message, conf, batch_state
         )
-    
-    # Send to normal recipients only
-    send_notification(subject, html_content, conf, 'normal')
+        
+        # Send failure notification
+        send_notification(subject, html_content, conf, 'fail')
 
 def format_resume_message(dag_id: str, run_id: str, start_time: datetime, conf: Dict, previous_state: Dict) -> str:
     """Format resume notification message"""
@@ -1983,4 +2027,3 @@ with DAG(
     
     # กำหนด Dependencies
     create_table_task >> running_notification >> process_task >> check_pause_task >> [success_notification, failure_notification]
-    
