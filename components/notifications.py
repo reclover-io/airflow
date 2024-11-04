@@ -324,7 +324,7 @@ def format_resume_message(dag_id: str, run_id: str, start_time: datetime, conf: 
         <ul>
             <li>Records Processed: {previous_fetch_count:,} / {total_records:,}</li>
             <li>Progress: {progress_percentage:.2f}%</li>
-            <li>Last Updated: {format_thai_time(last_updated) if last_updated else 'Unknown'}</li>
+            <li>Last Updated: {last_updated.strftime('%Y-%m-%d %H:%M:%S') if last_updated else 'Unknown'}</li>
         </ul>
         
         <h3>Batch Configuration:</h3>
