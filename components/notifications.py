@@ -25,7 +25,6 @@ def get_notification_recipients(conf: Dict, notification_type: str) -> List[str]
     notification_type: 'success' | 'normal' | 'fail' | 'pause' | 'resume' | 'start'
     Returns combined list of recipients for the specified type
     """
-    # Get default recipients
     all_recipients = conf.get('email', [])
     if not isinstance(all_recipients, list):
         all_recipients = [all_recipients]
@@ -50,11 +49,9 @@ def get_notification_recipients(conf: Dict, notification_type: str) -> List[str]
         if not isinstance(type_recipients, list):
             type_recipients = [type_recipients]
         
-        # Combine with default recipients
         combined_recipients = list(set(all_recipients + type_recipients))
         return combined_recipients
     
-    # Return default recipients for unspecified types
     return all_recipients
 
 # Message formatting functions
@@ -82,7 +79,7 @@ def format_success_message(dag_id: str, run_id: str, current_time: datetime,
     # Get initial start time
     start_time = get_initial_start_time(dag_id, run_id)
     if not start_time:
-        start_time = current_time  # Fallback to current time if no initial time found
+        start_time = current_time 
         
     # Ensure both times are in Thai timezone
     if current_time.tzinfo is None:
@@ -95,7 +92,6 @@ def format_success_message(dag_id: str, run_id: str, current_time: datetime,
     else:
         start_time = start_time.astimezone(THAI_TZ)
     
-    # Calculate elapsed time from initial start
     elapsed_time = current_time - start_time
     
     # Ensure elapsed time is positive
@@ -107,10 +103,8 @@ def format_success_message(dag_id: str, run_id: str, current_time: datetime,
     minutes, seconds = divmod(remainder, 60)
     elapsed_str = f"{hours}h {minutes}m {seconds}s"
     
-    # Get progress information
     fetched_records = batch_state.get('fetched_records', 0) if batch_state else 0
     
-    # Calculate processing rate
     total_seconds = elapsed_time.total_seconds()
     processing_rate = (fetched_records / total_seconds) if total_seconds > 0 else 0
     
@@ -145,12 +139,11 @@ def format_success_message(dag_id: str, run_id: str, current_time: datetime,
 
 def format_error_message(dag_id: str, run_id: str, start_time: datetime, end_time: datetime, error_message: str, conf: Dict, batch_state: Optional[Dict] = None) -> str:
     """Format error notification message with progress details"""
-    # Get progress information with safe default values
+
     fetched_records = batch_state.get('fetched_records', 0) if batch_state else 0
     total_records = batch_state.get('total_records') if batch_state else None
     current_page = batch_state.get('current_page', 1) if batch_state else 1
     
-    # Calculate progress percentage safely
     if total_records and total_records > 0:
         progress_percentage = (fetched_records / total_records * 100)
     else:
@@ -404,10 +397,8 @@ def send_success_notification(**context):
     process_result = ti.xcom_pull(task_ids='process_data')
     
     if isinstance(process_result, tuple) and len(process_result) == 4:
-        # Unpack the result (output_path, csv_filename, control_path, control_filename)
         _, csv_filename, _, control_filename = process_result
     else:
-        # Fallback to old format or handle error
         csv_filename = ti.xcom_pull(key='output_filename')
         control_filename = ti.xcom_pull(key='control_filename', default='Not available')
     
@@ -415,7 +406,6 @@ def send_success_notification(**context):
     batch_state = get_batch_state(dag_id, run_id)
     
     if batch_state and batch_state.get('initial_start_time'):
-        # Use initial_start_time from batch state
         if isinstance(batch_state['initial_start_time'], str):
             start_time = datetime.fromisoformat(
                 batch_state['initial_start_time'].replace('Z', '+00:00')
@@ -423,7 +413,6 @@ def send_success_notification(**context):
         else:
             start_time = batch_state['initial_start_time']
     else:
-        # Fallback to XCom if initial_start_time not available
         start_time_str = ti.xcom_pull(key='batch_start_time')
         start_time = datetime.fromisoformat(start_time_str)
     
@@ -443,7 +432,6 @@ def send_success_notification(**context):
     
     # Send success notification to both groups
     if conf.get('emailSuccess'):
-        # Send to success recipients
         send_notification(subject, html_content, conf, 'success')
     
     # Send to normal recipients
@@ -467,7 +455,6 @@ def send_failure_notification(**context):
     
     # Check if this is a manual pause
     if is_manual_pause(error_message):
-        # Update batch state to PAUSED
         save_batch_state(
             batch_id=dag_id,
             run_id=run_id,
@@ -501,7 +488,6 @@ def send_failure_notification(**context):
         send_notification(subject, html_content, conf, 'pause')
         
     else:
-        # Error case
         error_message = error_message or "Unknown error"
         subject = f"Batch Process {dag_id} Failed"
         html_content = format_error_message(

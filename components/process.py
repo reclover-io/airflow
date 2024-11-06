@@ -445,7 +445,6 @@ def process_data(API_URL: str, TEMP_DIR: str, OUTPUT_DIR: str,CONTROL_DIR: str, 
         dag_run = kwargs['dag_run']
         conf = dag_run.conf or {}
 
-
         # Validate configuration
         is_valid, error_message = validate_config(conf,DEFAULT_CSV_COLUMNS)
         if not is_valid:
@@ -531,20 +530,15 @@ def check_pause_status(**context):
     
     # ตรวจสอบว่ามีการ return dict หรือ tuple
     if isinstance(process_result, dict):
-        # กรณี pause จะ return dict
         if process_result.get('status') == 'paused':
             msg = process_result.get('message', 'Process was paused')
             print(f"Task was paused: {msg}")
-            # เก็บข้อความสำหรับ notification
             ti.xcom_push(key='error_message', value=msg)
-            # ต้อง raise exception เพื่อให้ task fail
             raise AirflowException(msg)
     elif isinstance(process_result, tuple):
-        # กรณีสำเร็จจะ return tuple ของ (path, filename)
         print("Task completed successfully")
         return True
     
-    # กรณีอื่นๆ ให้ fail
     msg = f"Invalid process result type: {type(process_result)}"
     print(msg)
     raise AirflowException(msg)

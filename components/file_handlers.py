@@ -14,11 +14,9 @@ def validate_and_create_path(base_path: str, OUTPUT_DIR: str) -> str:
     Returns the validated path
     """
     try:
-        # ถ้าไม่ได้ระบุ path ให้ใช้ path default
         if not base_path:
             return OUTPUT_DIR
         
-        # ทำให้ path เป็น absolute path
         abs_path = os.path.abspath(base_path)
         
         # ตรวจสอบว่า path อยู่ภายใต้ /opt/airflow หรือไม่
@@ -27,7 +25,6 @@ def validate_and_create_path(base_path: str, OUTPUT_DIR: str) -> str:
                 f"Invalid path: {base_path}. Path must be under /opt/airflow"
             )
         
-        # สร้าง directory ถ้ายังไม่มี
         os.makedirs(abs_path, exist_ok=True)
         print(f"Using output directory: {abs_path}")
         
@@ -68,12 +65,10 @@ def get_formatted_filename(template: str, dag_id: str, timestamp: datetime) -> s
     {time} -> %H.%M.%S
     """
     try:
-        # ถ้าไม่ได้ระบุ template ให้ใช้ชื่อ default
         if not template:
             default_format = timestamp.strftime('%Y%m%d%H%M%S')
             return f"{dag_id}_{default_format}.csv"
         
-        # สร้าง pattern สำหรับค้นหา placeholders ที่มี format
         pattern = r'\{(date_time|date|time)(?::([^}]+))?\}'
         
         # แทนที่ placeholders ด้วย format ที่กำหนด
@@ -105,7 +100,6 @@ def get_formatted_filename(template: str, dag_id: str, timestamp: datetime) -> s
         # แทนที่ placeholders ทั้งหมด
         filename = re.sub(pattern, replace_match, template)
         
-        # แทนที่ {dag_id}
         filename = filename.replace('{dag_id}', dag_id)
         
         # ถ้าไม่มีนามสกุลไฟล์ ให้เพิ่ม .csv
@@ -130,7 +124,6 @@ def get_control_file_config(conf: Dict, dag_id: str, timestamp: datetime, CONTRO
     """
     control_path = conf.get('controlPath', CONTROL_DIR)
     
-    # สร้าง directory ถ้ายังไม่มี
     os.makedirs(control_path, exist_ok=True)
     
     # ใช้ template จาก config หรือใช้ default
@@ -154,7 +147,6 @@ def create_control_file(start_date: str, total_records: int, csv_filename: str,
     try:
         data_dt = datetime.strptime(start_date.split()[0], '%Y-%m-%d').strftime('%Y-%m-%d')
         
-        # ใช้เวลาปัจจุบันเป็น process_date
         process_time = get_thai_time()
         process_date = process_time.strftime('%Y-%m-%d %H:%M:%S')
         
@@ -195,10 +187,8 @@ def save_temp_data(records: List[Dict], temp_file: str, headers: bool = False, c
     """
     Save data to temporary CSV file with specified columns in exact order using | as separator
     """
-    # Create DataFrame from records
     df = pd.DataFrame(records)
     
-    # Use specified columns or default if none provided
     columns_to_use = columns if columns else DEFAULT_CSV_COLUMNS
     
     # Verify all required columns exist in the data

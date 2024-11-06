@@ -3,9 +3,6 @@ from datetime import datetime
 import re
 from airflow.exceptions import AirflowException
 
-# from components.constants import DEFAULT_CSV_COLUMNS
-
-# Date validation functions
 def validate_datetime_format(date_str: str, field_name: str) -> Tuple[bool, Optional[str]]:
     """
     Validate datetime string format
@@ -16,14 +13,12 @@ def validate_datetime_format(date_str: str, field_name: str) -> Tuple[bool, Opti
         if not date_str:
             return False, f"{field_name} is required"
             
-        # แยกส่วนวันที่และเวลา
         date_parts = date_str.split(' ')
         if len(date_parts) != 2:
             return False, f"Invalid {field_name} format. Expected 'YYYY-MM-DD HH:mm:ss.SSS'"
             
         date_part, time_part = date_parts
         
-        # ตรวจสอบรูปแบบวันที่
         date_components = date_part.split('-')
         if len(date_components) != 3:
             return False, f"Invalid date format in {field_name}. Expected 'YYYY-MM-DD'"
@@ -32,7 +27,6 @@ def validate_datetime_format(date_str: str, field_name: str) -> Tuple[bool, Opti
         if not (len(year) == 4 and len(month) == 2 and len(day) == 2):
             return False, f"Invalid date components in {field_name}. Year should be 4 digits, month and day should be 2 digits"
             
-        # ตรวจสอบรูปแบบเวลา
         if '.' not in time_part:
             return False, f"Missing milliseconds in {field_name}. Expected format 'HH:mm:ss.SSS'"
             
@@ -44,10 +38,8 @@ def validate_datetime_format(date_str: str, field_name: str) -> Tuple[bool, Opti
         if not (len(hours) == 2 and len(minutes) == 2 and len(seconds) == 2):
             return False, f"Invalid time components in {field_name}. Hours, minutes, and seconds should be 2 digits"
             
-        # ตรวจสอบค่าที่ถูกต้อง
         datetime.strptime(date_str.split('.')[0], '%Y-%m-%d %H:%M:%S')
         
-        # ตรวจสอบค่าตัวเลข
         if not (1 <= int(month) <= 12 and 1 <= int(day) <= 31):
             return False, f"Invalid date values in {field_name}"
         if not (0 <= int(hours) <= 23 and 0 <= int(minutes) <= 59 and 0 <= int(seconds) <= 59):
@@ -124,7 +116,6 @@ def validate_email_config(conf: Dict) -> Tuple[bool, Optional[str]]:
         'emailStart': 'Start email'
     }
     
-    # ตรวจสอบ email หลัก (required)
     main_emails = conf.get('email', [])
     if not main_emails:
         return True, None
@@ -135,10 +126,9 @@ def validate_email_config(conf: Dict) -> Tuple[bool, Optional[str]]:
     if not validate_email_list(main_emails):
         return False, "Invalid main email address format"
     
-    # ตรวจสอบ email ประเภทอื่นๆ (optional)
     for email_key, email_desc in email_types.items():
         if email_key == 'email':
-            continue  # ข้ามการตรวจสอบ email หลักเพราะตรวจไปแล้ว
+            continue 
             
         email_list = conf.get(email_key, [])
         if email_list:
@@ -158,7 +148,7 @@ def validate_pause_time(pause_time: Optional[str]) -> Tuple[bool, Optional[str]]
     Expected format: HH:mm:ss.SSS
     """
     if not pause_time:
-        return True, None  # pause time is optional
+        return True, None 
         
     try:
         # Check basic format using regex
@@ -212,7 +202,7 @@ def validate_filename_template(template: Optional[str]) -> Tuple[bool, Optional[
         return True, None
         
     try:
-        # ตรวจสอบว่ามี placeholder ที่ไม่รู้จักหรือไม่
+
         valid_placeholders = ['date_time', 'date', 'time', 'dag_id']
         pattern = r'\{([^}:]+)(?::([^}]+))?\}'
         matches = re.finditer(pattern, template)
@@ -225,7 +215,6 @@ def validate_filename_template(template: Optional[str]) -> Tuple[bool, Optional[
                 return False, f"Invalid placeholder: {{{placeholder}}}. Valid placeholders are: " + \
                             ", ".join([f"{{{p}}}" for p in valid_placeholders])
             
-            # ถ้ามีการระบุ format ให้ทดสอบว่าใช้ได้จริง
             if format_str:
                 try:
                     datetime.now().strftime(format_str)
@@ -244,25 +233,20 @@ def validate_csv_columns(conf: Dict, DEFAULT_CSV_COLUMNS: List[str]) -> Tuple[bo
     Returns (is_valid, error_message)
     """
     try:
-        # ตรวจสอบว่ามีการระบุ csvColumns หรือไม่
         csv_columns = conf.get('csvColumns') or conf.get('csvColumn')
         if not csv_columns:
             return False, "CSV columns not specified in configuration"
         
-        # ตรวจสอบว่าเป็น list หรือไม่
         if not isinstance(csv_columns, list):
             return False, "CSV columns must be a list"
-        
-        # ตรวจสอบว่ามี column หรือไม่
+
         if len(csv_columns) == 0:
             return False, "CSV columns list is empty"
         
-        # ตรวจสอบว่าแต่ละ column เป็น string หรือไม่
         non_string_columns = [col for col in csv_columns if not isinstance(col, str)]
         if non_string_columns:
             return False, f"Invalid column types found: {non_string_columns}. All columns must be strings"
         
-        # ตรวจสอบว่า column อยู่ใน DEFAULT_CSV_COLUMNS หรือไม่
         invalid_columns = [col for col in csv_columns if col not in DEFAULT_CSV_COLUMNS]
         if invalid_columns:
             return False, f"Invalid columns specified: {invalid_columns}. Available columns are: {DEFAULT_CSV_COLUMNS}"
