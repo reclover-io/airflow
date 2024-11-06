@@ -18,7 +18,7 @@ sed \
     -e "s|{DEFAULT_CSV_COLUMNS}|$DEFAULT_CSV_COLUMNS|g" \
     dag_template.py > ../dags/$DAG_NAME.py
 
-if [[ -f "/opt/airflow/dags/$DAG_NAME.py" ]]; then
+if [[ -f "../dags/$DAG_NAME.py" ]]; then
     echo "DAG file /opt/airflow/dags/$DAG_NAME.py created successfully."
 else
     echo "Error: Failed to create DAG file /opt/airflow/dags/$DAG_NAME.py"
