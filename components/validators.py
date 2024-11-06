@@ -127,7 +127,7 @@ def validate_email_config(conf: Dict) -> Tuple[bool, Optional[str]]:
     # ตรวจสอบ email หลัก (required)
     main_emails = conf.get('email', [])
     if not main_emails:
-        return False, "Main email addresses are required"
+        return True, None
     
     if not isinstance(main_emails, list):
         return False, "Main email configuration must be a list"
