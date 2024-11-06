@@ -14,6 +14,7 @@ from components.process import process_data, check_pause_status
 from components.constants import *
 
 API_URL = 'http://34.124.138.144:8000/api/common/authentication'
+DAG_NAME = 'MobileApp_Activity_Logs'
 
 # API Configuration
 API_HEADERS = {
@@ -43,7 +44,7 @@ default_args = {
 
 # Create the DAG
 with DAG(
-    'MobileApp_Activity_Logs',
+    DAG_NAME,
     default_args=default_args,
     description='Fetch API data with date range and save to CSV',
     schedule_interval=None,

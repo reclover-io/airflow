@@ -14,7 +14,7 @@ from components.process import process_data, check_pause_status
 from components.constants import *
 
 API_URL = "http://34.124.138.144:8000/mobileAppActivity"
-
+DAG_NAME = 'Friend_MB_Noti_Spending'
 # API Configuration
 API_HEADERS = {
     'Authorization': 'R2pDZVNaRUJnMmt1a0tEVE5raEo6ZTNrYm1WRk1Sb216UGUtU21DS21iZw==',
@@ -42,7 +42,7 @@ default_args = {
 
 # Create the DAG
 with DAG(
-    'Friend_MB_Noti_Spending',
+    DAG_NAME,
     default_args=default_args,
     description='Fetch API data with date range and save to CSV',
     schedule_interval=None,
