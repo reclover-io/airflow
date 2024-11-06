@@ -3,7 +3,7 @@ from datetime import datetime
 import re
 from airflow.exceptions import AirflowException
 
-from .constants import DEFAULT_CSV_COLUMNS
+from components.constants import DEFAULT_CSV_COLUMNS
 
 # Date validation functions
 def validate_datetime_format(date_str: str, field_name: str) -> Tuple[bool, Optional[str]]:

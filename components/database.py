@@ -4,8 +4,8 @@ from sqlalchemy import create_engine, text
 import pytz
 from datetime import datetime
 import json
-from .constants import THAI_TZ, DB_CONNECTION
-from .utils import get_thai_time
+from components.constants import THAI_TZ, DB_CONNECTION
+from components.utils import get_thai_time
 
 # Context manager for database connection
 @contextmanager

@@ -3,9 +3,9 @@ from datetime import datetime, timedelta
 from airflow.exceptions import AirflowException
 import shutil
 import os
-from .constants import THAI_TZ
+from components.constants import THAI_TZ
 
-from .database import (
+from components.database import (
     get_batch_state, 
     save_batch_state,
 )

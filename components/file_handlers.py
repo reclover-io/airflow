@@ -74,8 +74,6 @@ def get_formatted_filename(template: str, dag_id: str, timestamp: datetime) -> s
     {date} -> %Y-%m-%d
     {time} -> %H.%M.%S
     """
-    try:
-        # ถ้าไม่ได้ระบุ template ให้ใช้ชื่อ default
         if not template:
             default_format = timestamp.strftime('%Y%m%d%H%M%S')
             return f"{dag_id}_{default_format}.csv"
