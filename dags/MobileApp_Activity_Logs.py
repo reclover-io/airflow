@@ -13,6 +13,24 @@ from components.notifications import (
 from components.process import process_data, check_pause_status
 from components.constants import *
 
+API_URL = 'http://34.124.138.144:8000/api/common/authentication'
+
+# API Configuration
+API_HEADERS = {
+    'Authorization': 'R2pDZVNaRUJnMmt1a0tEVE5raEo6ZTNrYm1WRk1Sb216UGUtU21DS21iZw==',
+    'Content-Type': 'application/json'
+}
+
+# Output Configuration
+OUTPUT_DIR = '/opt/airflow/output'
+TEMP_DIR = '/opt/airflow/output/temp'
+CONTROL_DIR = '/opt/airflow/output/control'
+
+DEFAULT_CSV_COLUMNS = [
+    'MemberType', 'Latitude', 'Longitude', 'Status', 'DeviceOS', 
+    'ModelName', 'UserToken', 'RequestDateTime', '_id'
+]
+
 # Default arguments for the DAG
 default_args = {
     'owner': 'airflow',
@@ -25,7 +43,7 @@ default_args = {
 
 # Create the DAG
 with DAG(
-    'batch_api_to_csv_with_dynamic_dates_backup',
+    'MobileApp_Activity_Logs',
     default_args=default_args,
     description='Fetch API data with date range and save to CSV',
     schedule_interval=None,
@@ -50,7 +68,10 @@ with DAG(
         task_id='process_data',
         python_callable=process_data,
         provide_context=True,
-        retries=3
+        retries=3,
+        op_args=[API_URL,TEMP_DIR,OUTPUT_DIR,CONTROL_DIR,API_HEADERS,DEFAULT_CSV_COLUMNS],
+
+
     )
     
     check_pause_task = PythonOperator(

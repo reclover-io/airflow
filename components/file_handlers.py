@@ -6,16 +6,9 @@ import pandas as pd
 import csv
 import re
 from airflow.exceptions import AirflowException
+from components.utils import get_thai_time
 
-from .constants import (
-    OUTPUT_DIR, 
-    TEMP_DIR, 
-    CONTROL_DIR,
-    DEFAULT_CSV_COLUMNS
-)
-from .utils import get_thai_time
-
-def validate_and_create_path(base_path: str) -> str:
+def validate_and_create_path(base_path: str, OUTPUT_DIR: str) -> str:
     """
     Validate and create output directory path
     Returns the validated path
@@ -45,7 +38,7 @@ def validate_and_create_path(base_path: str) -> str:
             raise
         raise AirflowException(f"Error validating path: {str(e)}")
 
-def get_output_config(conf: Dict, dag_id: str) -> Tuple[str, str]:
+def get_output_config(conf: Dict, dag_id: str, OUTPUT_DIR: str) -> Tuple[str, str]:
     """
     Get output file configuration from DAG config
     Returns tuple of (output_path, filename_template)
@@ -54,7 +47,7 @@ def get_output_config(conf: Dict, dag_id: str) -> Tuple[str, str]:
     filename_template = conf.get('csvName')
     
     # Validate and create output directory
-    output_path = validate_and_create_path(custom_path)
+    output_path = validate_and_create_path(custom_path, OUTPUT_DIR)
     
     print(f"Output configuration - Path: {output_path}, Template: {filename_template}")
     return output_path, filename_template
@@ -74,6 +67,8 @@ def get_formatted_filename(template: str, dag_id: str, timestamp: datetime) -> s
     {date} -> %Y-%m-%d
     {time} -> %H.%M.%S
     """
+    try:
+        # ถ้าไม่ได้ระบุ template ให้ใช้ชื่อ default
         if not template:
             default_format = timestamp.strftime('%Y%m%d%H%M%S')
             return f"{dag_id}_{default_format}.csv"
@@ -128,12 +123,11 @@ def get_formatted_filename(template: str, dag_id: str, timestamp: datetime) -> s
             raise
         raise AirflowException(f"Error formatting filename: {str(e)}")
 
-def get_control_file_config(conf: Dict, dag_id: str, timestamp: datetime) -> Tuple[str, str]:
+def get_control_file_config(conf: Dict, dag_id: str, timestamp: datetime, CONTROL_DIR: str) -> Tuple[str, str]:
     """
     Get control file path and name configuration
     Returns (control_path, control_filename)
     """
-    # ใช้ path จาก config หรือใช้ default
     control_path = conf.get('controlPath', CONTROL_DIR)
     
     # สร้าง directory ถ้ายังไม่มี
@@ -152,13 +146,12 @@ def get_control_file_config(conf: Dict, dag_id: str, timestamp: datetime) -> Tup
     return control_path, control_filename
 
 def create_control_file(start_date: str, total_records: int, csv_filename: str,
-                       dag_id: str, conf: Dict) -> Tuple[str, str]:
+                       dag_id: str, conf: Dict, CONTROL_DIR: str) -> Tuple[str, str]:
     """
     Create control file with summary information
     Returns (control_path, control_filename)
     """
     try:
-        # แปลง start_date เป็น data_dt (เอาเฉพาะวันที่)
         data_dt = datetime.strptime(start_date.split()[0], '%Y-%m-%d').strftime('%Y-%m-%d')
         
         # ใช้เวลาปัจจุบันเป็น process_date
@@ -166,7 +159,7 @@ def create_control_file(start_date: str, total_records: int, csv_filename: str,
         process_date = process_time.strftime('%Y-%m-%d %H:%M:%S')
         
         # Get control file configuration
-        control_path, control_filename = get_control_file_config(conf, dag_id, process_time)
+        control_path, control_filename = get_control_file_config(conf, dag_id, process_time,CONTROL_DIR)
         
         # สร้าง DataFrame สำหรับ control file
         control_data = {
@@ -177,10 +170,8 @@ def create_control_file(start_date: str, total_records: int, csv_filename: str,
         }
         control_df = pd.DataFrame(control_data)
         
-        # กำหนด path เต็ม
         full_path = os.path.join(control_path, control_filename)
         
-        # บันทึกไฟล์ control
         control_df.to_csv(
             full_path,
             sep='|',
@@ -227,8 +218,8 @@ def save_temp_data(records: List[Dict], temp_file: str, headers: bool = False, c
         header=headers,
         index=False,
         sep='|',
-        escapechar='\\',  # ใช้ \ เป็น escape character
-        doublequote=True,  # ใช้ double quotes สำหรับ field ที่มี | อยู่ในข้อมูล
-        quoting=csv.QUOTE_MINIMAL  # ใส่ quotes เฉพาะเมื่อจำเป็น
+        escapechar='\\', 
+        doublequote=True, 
+        quoting=csv.QUOTE_MINIMAL  
     )
     print(f"Saved data with ordered columns: {columns_to_use} using | separator")

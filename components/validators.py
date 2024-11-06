@@ -3,7 +3,7 @@ from datetime import datetime
 import re
 from airflow.exceptions import AirflowException
 
-from components.constants import DEFAULT_CSV_COLUMNS
+# from components.constants import DEFAULT_CSV_COLUMNS
 
 # Date validation functions
 def validate_datetime_format(date_str: str, field_name: str) -> Tuple[bool, Optional[str]]:
@@ -238,7 +238,7 @@ def validate_filename_template(template: Optional[str]) -> Tuple[bool, Optional[
         return False, f"Error validating filename template: {str(e)}"
 
 # CSV validation functions
-def validate_csv_columns(conf: Dict) -> Tuple[bool, Optional[str]]:
+def validate_csv_columns(conf: Dict, DEFAULT_CSV_COLUMNS: List[str]) -> Tuple[bool, Optional[str]]:
     """
     Validate CSV columns configuration
     Returns (is_valid, error_message)
@@ -272,7 +272,7 @@ def validate_csv_columns(conf: Dict) -> Tuple[bool, Optional[str]]:
     except Exception as e:
         return False, f"Error validating CSV columns: {str(e)}"
 
-def get_csv_columns(conf: Dict) -> List[str]:
+def get_csv_columns(conf: Dict , DEFAULT_CSV_COLUMNS: List[str]) -> List[str]:
     """
     Get CSV columns from config or use default if not specified
     """
@@ -288,7 +288,7 @@ def get_csv_columns(conf: Dict) -> List[str]:
     return csv_columns
 
 # Main validation function
-def validate_config(conf: Dict) -> Tuple[bool, Optional[str]]:
+def validate_config(conf: Dict, DEFAULT_CSV_COLUMNS: List[str]) -> Tuple[bool, Optional[str]]:
     """
     Validate all configuration parameters
     Returns (is_valid, error_message)
@@ -304,7 +304,7 @@ def validate_config(conf: Dict) -> Tuple[bool, Optional[str]]:
         return False, error_message
     
     # Validate CSV columns
-    is_valid, error_message = validate_csv_columns(conf)
+    is_valid, error_message = validate_csv_columns(conf, DEFAULT_CSV_COLUMNS)
     if not is_valid:
         return False, error_message
     

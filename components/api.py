@@ -1,9 +1,7 @@
 import requests
 import json
 import time
-
-# Import constants from main DAG file
-from .constants import API_URL, API_HEADERS, PAGE_SIZE
+from typing import Dict, List, Optional, Tuple
 
 # Custom exceptions
 class APIException(Exception):
@@ -35,7 +33,7 @@ def retry_api_call(func, max_retries=3, initial_delay=1):
             print(f"Attempt {attempt + 1} failed. Retrying in {delay} seconds...")
             time.sleep(delay)
 
-def fetch_data_page(start_date: str, end_date: str, search_after: Optional[List[str]] = None) -> Tuple[List[Dict], int, Optional[List[str]]]:
+def fetch_data_page(start_date: str, end_date: str, search_after: Optional[List[str]], API_URL: str, API_HEADERS: Dict[str, str]) -> Tuple[List[Dict], int, Optional[List[str]]]:
     """Fetch a single page of data from the API with retries"""
     payload = {
         "startDate": start_date,

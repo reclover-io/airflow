@@ -3,32 +3,28 @@ from datetime import datetime, timedelta
 from airflow.exceptions import AirflowException
 import shutil
 import os
-from components.constants import THAI_TZ
 
 from components.database import (
     get_batch_state, 
     save_batch_state,
 )
-from .api import fetch_data_page
-from .file_handlers import (
+from components.api import fetch_data_page
+from components.file_handlers import (
     save_temp_data,
     create_control_file,
     get_output_config,
     get_formatted_filename
 )
-from .validators import (
+from components.validators import (
     validate_config,
     get_csv_columns
 )
-from .utils import (
+from components.utils import (
     get_thai_time,
     format_thai_time
 )
-from .constants import (
-    OUTPUT_DIR, 
-    TEMP_DIR, 
-    CONTROL_DIR,
-    DEFAULT_CSV_COLUMNS,
+from components.constants import (
+    THAI_TZ,
     PAGE_SIZE
 )
 
@@ -192,17 +188,17 @@ def is_manual_pause(error_message: Optional[str]) -> bool:
     return error_message and any(msg in error_message for msg in sigterm_messages)
 
 # Main process functions
-def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str, conf: Dict) -> str:
+def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str, conf: Dict, API_URL: str, TEMP_DIR: str, OUTPUT_DIR: str, DEFAULT_CSV_COLUMNS: List[str], API_HEADERS: Dict[str, str]) -> Tuple[str, str]:
     """Fetch all data from API using pagination and save to CSV with state management"""
 
     # Get output configuration
-    output_path, filename_template = get_output_config(conf, dag_id)
+    output_path, filename_template = get_output_config(conf, dag_id, OUTPUT_DIR)
 
     os.makedirs(TEMP_DIR, exist_ok=True)
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     
     try:
-        csv_columns = get_csv_columns(conf)
+        csv_columns = get_csv_columns(conf, DEFAULT_CSV_COLUMNS)
         print(f"Using CSV columns: {csv_columns}")
     except AirflowException as e:
         print(f"Error in CSV columns configuration: {str(e)}")
@@ -322,7 +318,7 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
             print(f"\nFetching page {page}...")
             
             try:
-                records, total, next_search_after = fetch_data_page(start_date, end_date, search_after)
+                records, total, next_search_after = fetch_data_page(start_date, end_date, search_after, API_URL, API_HEADERS)
             except (APIException, NoDataException) as e:
                 save_batch_state(
                     batch_id=dag_id,
@@ -442,15 +438,16 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
         )
         raise e
 
-def process_data(**context):
-    """Process the data and handle notifications"""
+def process_data(API_URL: str, TEMP_DIR: str, OUTPUT_DIR: str,CONTROL_DIR: str, API_HEADERS: Dict[str, str], DEFAULT_CSV_COLUMNS: List[str], **kwargs):
+    """Process the data and handle notifications""" 
     try:
-        ti = context['task_instance']
-        dag_run = context['dag_run']
+        ti = kwargs['task_instance']
+        dag_run = kwargs['dag_run']
         conf = dag_run.conf or {}
-        
+
+
         # Validate configuration
-        is_valid, error_message = validate_config(conf)
+        is_valid, error_message = validate_config(conf,DEFAULT_CSV_COLUMNS)
         if not is_valid:
             print(f"Configuration validation failed: {error_message}")
             ti.xcom_push(key='error_message', value=f"Configuration Error: {error_message}")
@@ -478,7 +475,13 @@ def process_data(**context):
                 end_date=end_date,
                 dag_id=dag_run.dag_id,
                 run_id=run_id,
-                conf=conf
+                conf=conf,
+                API_URL=API_URL,
+                TEMP_DIR=TEMP_DIR,
+                OUTPUT_DIR=OUTPUT_DIR,
+                DEFAULT_CSV_COLUMNS=DEFAULT_CSV_COLUMNS,
+                API_HEADERS=API_HEADERS
+
             )
             
             if isinstance(result, dict) and result.get('status') == 'paused':
@@ -497,7 +500,8 @@ def process_data(**context):
                 total_records=total_records,
                 csv_filename=csv_filename,
                 dag_id=dag_run.dag_id,
-                conf=conf
+                conf=conf,
+                CONTROL_DIR=CONTROL_DIR
             )
             
             # Store control filename in XCom
