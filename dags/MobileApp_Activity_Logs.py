@@ -97,5 +97,10 @@ with DAG(
         trigger_rule=TriggerRule.ONE_FAILED
     )
     
+    uploadtoFTP = PythonOperator(
+        task_id='uploadtoFTP',
+        python_callable=upload_csv_ctrl_to_ftp_server,
+        provide_context=True,  
+    )
     # Define Dependencies
-    create_table_task >> running_notification >> process_task >> check_pause_task >> [success_notification, failure_notification]
+    create_table_task >> running_notification >> process_task >> check_pause_task >> uploadtoFTP >> [success_notification, failure_notification]

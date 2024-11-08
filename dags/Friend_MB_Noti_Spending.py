@@ -98,11 +98,9 @@ with DAG(
     
     uploadtoFTP = PythonOperator(
         task_id='uploadtoFTP',
-        python_callable=upload_csv_crtl_to_fpt_server,
-        provide_context=True,
-        
+        python_callable=upload_csv_ctrl_to_ftp_server,
+        provide_context=True,  
     )
-
     
     # Define Dependencies
     create_table_task >> running_notification >> process_task >> check_pause_task >> uploadtoFTP >> [success_notification, failure_notification]
