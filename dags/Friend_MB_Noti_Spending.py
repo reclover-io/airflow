@@ -12,6 +12,7 @@ from components.notifications import (
 )
 from components.process import process_data, check_pause_status
 from components.constants import *
+from components.uploadtoFTP import *
 
 API_URL = "http://34.124.138.144:8000/mobileAppActivity"
 DAG_NAME = 'Friend_MB_Noti_Spending'
@@ -22,7 +23,7 @@ API_HEADERS = {
 }
 
 # Output Configuration
-OUTPUT_DIR = '/opt/airflow/output'
+OUTPUT_DIR = '/opt/airflow/output/batch_process'
 TEMP_DIR = '/opt/airflow/output/temp'
 CONTROL_DIR = '/opt/airflow/output/control'
 
@@ -93,7 +94,15 @@ with DAG(
         python_callable=send_failure_notification,
         provide_context=True,
         trigger_rule=TriggerRule.ONE_FAILED
+    )    
+    
+    uploadtoFTP = PythonOperator(
+        task_id='uploadtoFTP',
+        python_callable=upload_csv_crtl_to_fpt_server,
+        provide_context=True,
+        
     )
+
     
     # Define Dependencies
-    create_table_task >> running_notification >> process_task >> check_pause_task >> [success_notification, failure_notification]
+    create_table_task >> running_notification >> process_task >> check_pause_task >> uploadtoFTP >> [success_notification, failure_notification]

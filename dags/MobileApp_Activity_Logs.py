@@ -23,7 +23,7 @@ API_HEADERS = {
 }
 
 # Output Configuration
-OUTPUT_DIR = '/opt/airflow/output'
+OUTPUT_DIR = '/opt/airflow/output/batch_process'
 TEMP_DIR = '/opt/airflow/output/temp'
 CONTROL_DIR = '/opt/airflow/output/control'
 

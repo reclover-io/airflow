@@ -285,6 +285,28 @@ services:
         condition: service_completed_successfully
     networks:
       - airflow-net
+  
+  ftp-server:
+    image: fauria/vsftpd
+    container_name: airflow-ftp-server
+    ports:
+      - "21:21"
+      - "20:20"
+      - "21100-21110:21100-21110"
+    environment:
+      FTP_USER: "airflow"
+      FTP_PASS: "airflow"
+      PASV_ADDRESS: "192.168.0.101"
+      PASV_MIN_PORT: 21100
+      PASV_MAX_PORT: 21110
+      FTP_MAX_CLIENTS: 10
+      FTP_MAX_CONNECTIONS: 5
+
+    volumes:
+      - ./ftp-data:/home/vsftpd
+    restart: always
+    networks:
+      - airflow-net
 
 volumes:
   postgres-db-volume:
