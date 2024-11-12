@@ -4,7 +4,6 @@ from airflow.utils.trigger_rule import TriggerRule
 from datetime import datetime, timedelta
 import pytz
 
-from components.database import ensure_batch_states_table_exists
 from components.notifications import (
     send_running_notification,
     send_success_notification, 
@@ -12,6 +11,7 @@ from components.notifications import (
 )
 from components.process import process_data, check_pause_status
 from components.constants import *
+from components.uploadtoFTP import *
 
 API_URL = 'http://34.124.138.144:8000/api/common/authentication'
 DAG_NAME = 'MobileApp_Activity_Logs'
@@ -23,7 +23,7 @@ API_HEADERS = {
 }
 
 # Output Configuration
-OUTPUT_DIR = '/opt/airflow/output'
+OUTPUT_DIR = '/opt/airflow/output/batch_process'
 TEMP_DIR = '/opt/airflow/output/temp'
 CONTROL_DIR = '/opt/airflow/output/control'
 
@@ -52,11 +52,6 @@ with DAG(
     catchup=False,
     tags=['api', 'csv', 'backup']
 ) as dag:
-    
-    create_table_task = PythonOperator(
-        task_id='ensure_table_exists',
-        python_callable=ensure_batch_states_table_exists
-    )
     
     running_notification = PythonOperator(
         task_id='send_running_notification',
@@ -96,6 +91,13 @@ with DAG(
         provide_context=True,
         trigger_rule=TriggerRule.ONE_FAILED
     )
+
+    uploadtoFTP = PythonOperator(
+        task_id='uploadtoFTP',
+        python_callable=upload_csv_ctrl_to_ftp_server,
+        provide_context=True,
+        
+    )
     
     # Define Dependencies
-    create_table_task >> running_notification >> process_task >> check_pause_task >> [success_notification, failure_notification]
+    running_notification >> process_task >> check_pause_task >> [success_notification, failure_notification]
