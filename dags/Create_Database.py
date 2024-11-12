@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from components.create_database import ensure_batch_states_table_exists
 from components.constants import *
 
-DAG_NAME = 'Create_Database'
+DAG_NAME = 'DB_Migration'
 
 # Default arguments for the DAG
 default_args = {
@@ -28,7 +28,7 @@ with DAG(
 ) as dag:
     
     create_table_task = PythonOperator(
-        task_id='ensure_table_exists',
+        task_id='Create_Database',
         python_callable=ensure_batch_states_table_exists
     )
     
