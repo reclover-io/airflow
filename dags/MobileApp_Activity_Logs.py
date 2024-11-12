@@ -4,7 +4,6 @@ from airflow.utils.trigger_rule import TriggerRule
 from datetime import datetime, timedelta
 import pytz
 
-from components.database import ensure_batch_states_table_exists
 from components.notifications import (
     send_running_notification,
     send_success_notification, 
@@ -53,11 +52,6 @@ with DAG(
     tags=['api', 'csv', 'backup']
 ) as dag:
     
-    create_table_task = PythonOperator(
-        task_id='ensure_table_exists',
-        python_callable=ensure_batch_states_table_exists
-    )
-    
     running_notification = PythonOperator(
         task_id='send_running_notification',
         python_callable=send_running_notification,
@@ -98,4 +92,4 @@ with DAG(
     )
     
     # Define Dependencies
-    create_table_task >> running_notification >> process_task >> check_pause_task >> [success_notification, failure_notification]
+    running_notification >> process_task >> check_pause_task >> [success_notification, failure_notification]
