@@ -35,7 +35,7 @@ def list_files_on_server(ftp, path='/'):
     ftp.cwd(path)
     ftp.retrlines('LIST')
 
-def upload_csv_crtl_to_fpt_server():
+def upload_csv_ctrl_to_ftp_server():
     ftp_server = '192.168.0.101'
     username = 'airflow'
     password = 'airflow'
@@ -55,4 +55,4 @@ def upload_csv_crtl_to_fpt_server():
     ftp.quit()
 
 if __name__ == "__main__":
-    upload_csv_crtl_to_fpt_server()
+    upload_csv_ctrl_to_ftp_server()

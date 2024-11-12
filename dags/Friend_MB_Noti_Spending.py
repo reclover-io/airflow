@@ -92,7 +92,7 @@ with DAG(
     
     uploadtoFTP = PythonOperator(
         task_id='uploadtoFTP',
-        python_callable=upload_csv_crtl_to_fpt_server,
+        python_callable=upload_csv_ctrl_to_ftp_server,
         provide_context=True,
         
     )

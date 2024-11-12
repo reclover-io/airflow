@@ -11,6 +11,7 @@ from components.notifications import (
 )
 from components.process import process_data, check_pause_status
 from components.constants import *
+from components.uploadtoFTP import *
 
 API_URL = 'http://34.124.138.144:8000/api/common/authentication'
 DAG_NAME = 'MobileApp_Activity_Logs'
@@ -89,6 +90,13 @@ with DAG(
         python_callable=send_failure_notification,
         provide_context=True,
         trigger_rule=TriggerRule.ONE_FAILED
+    )
+
+    uploadtoFTP = PythonOperator(
+        task_id='uploadtoFTP',
+        python_callable=upload_csv_ctrl_to_ftp_server,
+        provide_context=True,
+        
     )
     
     # Define Dependencies
