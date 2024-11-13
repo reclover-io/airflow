@@ -99,4 +99,4 @@ with DAG(
     )
     
     # Define Dependencies
-    running_notification >> process_task >> check_pause_task >> [success_notification, failure_notification]
+    running_notification >> process_task >> check_pause_task >> uploadtoFTP >> [success_notification, failure_notification]
