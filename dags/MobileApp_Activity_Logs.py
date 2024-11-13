@@ -13,7 +13,7 @@ from components.process import process_data, check_pause_status
 from components.constants import *
 from components.uploadtoFTP import *
 
-API_URL = 'http://34.124.138.144:8000/api/common/authentication'
+API_URL = 'http://34.124.138.144:8000/mobileAppActivity'
 DAG_NAME = 'MobileApp_Activity_Logs'
 
 # API Configuration
@@ -28,8 +28,7 @@ TEMP_DIR = '/opt/airflow/output/temp'
 CONTROL_DIR = '/opt/airflow/output/control'
 
 DEFAULT_CSV_COLUMNS = [
-    'MemberType', 'Latitude', 'Longitude', 'Status', 'DeviceOS', 
-    'ModelName', 'UserToken', 'RequestDateTime', '_id'
+    'RequestID', 'Path', 'UserToken', 'RequestDateTime', '_id' , 'Status', 'CounterCode'
 ]
 
 # Default arguments for the DAG

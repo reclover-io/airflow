@@ -13,8 +13,9 @@ from components.process import process_data, check_pause_status
 from components.constants import *
 from components.uploadtoFTP import *
 
-API_URL = "http://34.124.138.144:8000/mobileAppActivity"
+API_URL = "http://34.124.138.144:8000/friendMBNotiSpending"
 DAG_NAME = 'Friend_MB_Noti_Spending'
+
 # API Configuration
 API_HEADERS = {
     'Authorization': 'R2pDZVNaRUJnMmt1a0tEVE5raEo6ZTNrYm1WRk1Sb216UGUtU21DS21iZw==',
@@ -26,8 +27,10 @@ OUTPUT_DIR = '/opt/airflow/output/batch_process'
 TEMP_DIR = '/opt/airflow/output/temp'
 CONTROL_DIR = '/opt/airflow/output/control'
 
+
 DEFAULT_CSV_COLUMNS = [
-    'RequestID', 'Path', 'UserToken', 'RequestDateTime', '_id' , 'Status', 'CounterCode'
+    'Status', 'RequestDateTime', 'BusinessCode', 'UserToken', 'RequestID', 
+    '_id', 'MerchantName', 'Path', 'OriginalAmount', 'CurencyCode'
 ]
 
 # Default arguments for the DAG
