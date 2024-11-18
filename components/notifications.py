@@ -461,7 +461,7 @@ def send_success_notification(default_emails, slack_webhook=None, **context):
         send_notification(subject, html_content, conf, 'success', default_emails, slack_webhook, context)
     
     # Send to normal recipients
-    send_notification(subject, html_content, conf, 'normal', default_emails, slack_webhook, context)
+    send_notification(subject, html_content, conf, 'success', default_emails, slack_webhook, context)
 
 def send_failure_notification(default_emails, slack_webhook=None, **context):
     """Send failure or pause notification"""
