@@ -12,6 +12,7 @@ from components.notifications import (
 from components.process import process_data, check_pause_status
 from components.constants import *
 from components.uploadtoFTP import *
+from components.validators import validate_input_task
 
 API_URL = 'http://34.124.138.144:8000/mobileAppActivity'
 DAG_NAME = 'MobileApp_Activity_Logs'
@@ -26,10 +27,20 @@ API_HEADERS = {
 OUTPUT_DIR = '/opt/airflow/output/batch_process'
 TEMP_DIR = '/opt/airflow/output/temp'
 CONTROL_DIR = '/opt/airflow/output/control'
+slack_webhook = "https://hooks.slack.com/services/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"
 
 DEFAULT_CSV_COLUMNS = [
-    'RequestID', 'Path', 'UserToken', 'RequestDateTime', '_id' , 'Status', 'CounterCode'
+    'RequestID', 'Path', 'UserToken', 'RequestDateTime', '_id' , 'Status', 'CounterCode', 'Test'
 ]
+
+default_emails = {
+    'email': ['phurinatkantapayao2@gmail.com'],
+    'emailSuccess': [],
+    'emailFail': [],
+    'emailPause': [],
+    'emailResume': [],
+    'emailStart': []
+}
 
 # Default arguments for the DAG
 default_args = {
@@ -52,10 +63,19 @@ with DAG(
     tags=['api', 'csv', 'backup']
 ) as dag:
     
+    validate_input = PythonOperator(
+        task_id='validate_input',
+        python_callable=validate_input_task,
+        provide_context=True,
+        retries=1,
+        op_args=[DEFAULT_CSV_COLUMNS]
+    )
+    
     running_notification = PythonOperator(
         task_id='send_running_notification',
         python_callable=send_running_notification,
         provide_context=True,
+        op_args=[default_emails, slack_webhook],
         trigger_rule=TriggerRule.ALL_SUCCESS
     )
     
@@ -69,18 +89,11 @@ with DAG(
 
     )
     
-    check_pause_task = PythonOperator(
-        task_id='check_pause',
-        python_callable=check_pause_status,
-        provide_context=True,
-        trigger_rule=TriggerRule.ALL_SUCCESS,
-        retries=0
-    )
-    
     success_notification = PythonOperator(
         task_id='send_success_notification',
         python_callable=send_success_notification,
         provide_context=True,
+        op_args=[default_emails, slack_webhook],
         trigger_rule=TriggerRule.ALL_SUCCESS
     )
     
@@ -88,6 +101,7 @@ with DAG(
         task_id='send_failure_notification',
         python_callable=send_failure_notification,
         provide_context=True,
+        op_args=[default_emails, slack_webhook],
         trigger_rule=TriggerRule.ONE_FAILED
     )
 
@@ -99,4 +113,6 @@ with DAG(
     )
     
     # Define Dependencies
-    running_notification >> process_task >> check_pause_task >> uploadtoFTP >> [success_notification, failure_notification]
+    validate_input >> [running_notification, failure_notification]
+    running_notification >> process_task >> [uploadtoFTP, failure_notification]
+    uploadtoFTP >> [success_notification, failure_notification]

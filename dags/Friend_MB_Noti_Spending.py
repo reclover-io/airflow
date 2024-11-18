@@ -12,6 +12,7 @@ from components.notifications import (
 from components.process import process_data, check_pause_status
 from components.constants import *
 from components.uploadtoFTP import *
+from components.validators import validate_input_task
 
 API_URL = "http://34.124.138.144:8000/friendMBNotiSpending"
 DAG_NAME = 'Friend_MB_Noti_Spending'
@@ -53,6 +54,12 @@ with DAG(
     catchup=False,
     tags=['api', 'csv', 'backup']
 ) as dag:
+    
+    validate_input = PythonOperator(
+        task_id='validate_input',
+        python_callable=validate_input_task,
+        provide_context=True
+    )
     
     running_notification = PythonOperator(
         task_id='send_running_notification',
@@ -102,4 +109,6 @@ with DAG(
 
     
     # Define Dependencies
-    running_notification >> process_task >> check_pause_task >> uploadtoFTP >> [success_notification, failure_notification]
+    validate_input >> [running_notification, failure_notification]
+    running_notification >> process_task >> [uploadtoFTP, failure_notification]
+    uploadtoFTP >> [success_notification, failure_notification]
