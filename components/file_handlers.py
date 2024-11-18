@@ -191,15 +191,15 @@ def save_temp_data(records: List[Dict], temp_file: str, headers: bool = False, c
     
     columns_to_use = columns if columns else DEFAULT_CSV_COLUMNS
     
-    # Verify all required columns exist in the data
-    missing_columns = [col for col in columns_to_use if col not in df.columns]
-    if missing_columns:
-        raise AirflowException(f"Missing columns in data: {missing_columns}")
-    
     # Select and reorder columns - explicitly create new DataFrame with ordered columns
     ordered_df = pd.DataFrame(columns=columns_to_use)
+    
     for col in columns_to_use:
-        ordered_df[col] = df[col]
+        if col in df.columns:
+            ordered_df[col] = df[col]
+        else:
+            ordered_df[col] = ''  # Fill missing columns with empty string
+            print(f"Column '{col}' not found in data, filling with empty values")
     
     # Save to CSV with | separator
     ordered_df.to_csv(

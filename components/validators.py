@@ -227,29 +227,25 @@ def validate_filename_template(template: Optional[str]) -> Tuple[bool, Optional[
         return False, f"Error validating filename template: {str(e)}"
 
 # CSV validation functions
-def validate_csv_columns(conf: Dict, DEFAULT_CSV_COLUMNS: List[str]) -> Tuple[bool, Optional[str]]:
+def validate_csv_columns(conf: Dict, default_csv_columns: List[str]) -> Tuple[bool, Optional[str]]:
     """
     Validate CSV columns configuration
     Returns (is_valid, error_message)
     """
     try:
-        csv_columns = conf.get('csvColumns') or conf.get('csvColumn')
+        # ถ้าไม่ได้ระบุ csvColumns ให้ใช้ default
+        csv_columns = conf.get('csvColumn')
         if not csv_columns:
-            return False, "CSV columns not specified in configuration"
+            return True, None  # ไม่จำเป็นต้องตรวจสอบถ้าใช้ default
         
+        # ตรวจสอบว่าเป็น list หรือไม่
         if not isinstance(csv_columns, list):
             return False, "CSV columns must be a list"
-
-        if len(csv_columns) == 0:
-            return False, "CSV columns list is empty"
         
+        # ตรวจสอบว่าแต่ละ column เป็น string หรือไม่
         non_string_columns = [col for col in csv_columns if not isinstance(col, str)]
         if non_string_columns:
             return False, f"Invalid column types found: {non_string_columns}. All columns must be strings"
-        
-        invalid_columns = [col for col in csv_columns if col not in DEFAULT_CSV_COLUMNS]
-        if invalid_columns:
-            return False, f"Invalid columns specified: {invalid_columns}. Available columns are: {DEFAULT_CSV_COLUMNS}"
             
         return True, None
         
@@ -261,13 +257,7 @@ def get_csv_columns(conf: Dict , DEFAULT_CSV_COLUMNS: List[str]) -> List[str]:
     Get CSV columns from config or use default if not specified
     """
     # Check both possible keys for backwards compatibility
-    csv_columns = conf.get('csvColumns') or conf.get('csvColumn', DEFAULT_CSV_COLUMNS)
-    
-    # Validate that all specified columns exist in the default columns
-    invalid_columns = [col for col in csv_columns if col not in DEFAULT_CSV_COLUMNS]
-    if invalid_columns:
-        raise AirflowException(f"Invalid columns specified: {invalid_columns}. "
-                             f"Available columns are: {DEFAULT_CSV_COLUMNS}")
+    csv_columns = conf.get('csvColumn', DEFAULT_CSV_COLUMNS)
     
     return csv_columns
 
@@ -288,9 +278,10 @@ def validate_config(conf: Dict, DEFAULT_CSV_COLUMNS: List[str]) -> Tuple[bool, O
         return False, error_message
     
     # Validate CSV columns
-    is_valid, error_message = validate_csv_columns(conf, DEFAULT_CSV_COLUMNS)
-    if not is_valid:
-        return False, error_message
+    if 'csvColumn' in conf:
+        is_valid, error_message = validate_csv_columns(conf, DEFAULT_CSV_COLUMNS)
+        if not is_valid:
+            return False, error_message
     
     # Validate pause time
     pause_time = conf.get('pause')
@@ -305,3 +296,25 @@ def validate_config(conf: Dict, DEFAULT_CSV_COLUMNS: List[str]) -> Tuple[bool, O
         return False, error_message
     
     return True, None
+
+def validate_input_task(default_csv_columns, **context):
+    """Validate input configuration using existing validate_config function"""
+    try:
+        dag_run = context['dag_run']
+        conf = dag_run.conf or {}
+        
+        # Use existing validate_config function
+        is_valid, error_message = validate_config(conf, default_csv_columns)
+        
+        if not is_valid:
+            context['task_instance'].xcom_push(key='error_message', value=error_message)
+            raise AirflowException(f"Configuration validation failed: {error_message}")
+            
+        context['task_instance'].xcom_push(key='validation_result', value=True)
+        
+    except Exception as e:
+        error_msg = str(e)
+        if not isinstance(e, AirflowException):
+            error_msg = f"Unexpected error during validation: {error_msg}"
+        context['task_instance'].xcom_push(key='error_message', value=error_msg)
+        raise AirflowException(error_msg)

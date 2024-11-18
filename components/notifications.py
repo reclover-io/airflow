@@ -10,6 +10,8 @@ from components.database import save_batch_state
 
 from components.database import get_batch_state , get_initial_start_time
 from components.utils import get_thai_time
+from components.slack_notifications import SlackNotifier, create_slack_message
+
 
 # Utility functions
 def format_thai_time(dt: datetime) -> str:
@@ -19,36 +21,40 @@ def format_thai_time(dt: datetime) -> str:
     thai_time = dt.astimezone(THAI_TZ)
     return thai_time.strftime('%Y-%m-%d %H:%M:%S')
 
-def get_notification_recipients(conf: Dict, notification_type: str) -> List[str]:
+def get_notification_recipients(conf: Dict, notification_type: str, default_emails: Dict[str, List[str]]) -> List[str]:
     """
     Get email recipients based on notification type
     notification_type: 'success' | 'normal' | 'fail' | 'pause' | 'resume' | 'start'
     Returns combined list of recipients for the specified type
     """
-    all_recipients = conf.get('email', [])
+    all_recipients = conf.get('email', default_emails.get('email', []))
     if not isinstance(all_recipients, list):
         all_recipients = [all_recipients]
     
     if notification_type == 'success':
         # Special handling for success notifications
-        success_recipients = conf.get('emailSuccess', [])
+        success_recipients = conf.get('emailSuccess', default_emails.get('emailSuccess', []))
         if not isinstance(success_recipients, list):
             success_recipients = [success_recipients]
         return success_recipients
     
     # Get type-specific recipients
     type_map = {
+        'success': 'emailSuccess',
         'fail': 'emailFail',
         'pause': 'emailPause',
         'resume': 'emailResume',
         'start': 'emailStart'
     }
     
+    # Get type-specific recipients
     if notification_type in type_map:
-        type_recipients = conf.get(type_map[notification_type], [])
+        config_key = type_map[notification_type]
+        type_recipients = conf.get(config_key, default_emails.get(config_key, []))
         if not isinstance(type_recipients, list):
             type_recipients = [type_recipients]
         
+        # Combine with default recipients
         combined_recipients = list(set(all_recipients + type_recipients))
         return combined_recipients
     
@@ -341,23 +347,43 @@ def send_email_notification(to: List[str], subject: str, html_content: str):
     except Exception as e:
         print(f"Failed to send email: {str(e)}")
 
-def send_notification(subject: str, html_content: str, conf: Dict, notification_type: str):
-    """
-    Send notification to appropriate recipients based on type
-    """
-    recipients = get_notification_recipients(conf, notification_type)
-    if not recipients:
-        print(f"No recipients specified for notification type: {notification_type}")
-        return
-    
-    try:
-        send_email_notification(recipients, subject, html_content)
-        print(f"Notification sent to {notification_type} recipients: {recipients}")
-    except Exception as e:
-        print(f"Failed to send {notification_type} notification: {str(e)}")
+def send_notification(
+    subject: str, 
+    html_content: str, 
+    conf: Dict, 
+    notification_type: str, 
+    default_emails: Dict[str, List[str]],
+    slack_webhook: Optional[str] = None,
+    context: Optional[Dict] = None  # เพิ่ม context parameter
+):
+    """Send notification to appropriate recipients based on type"""
+    # Send email notification
+    recipients = get_notification_recipients(conf, notification_type, default_emails)
+    if recipients:
+        try:
+            send_email_notification(recipients, subject, html_content)
+            print(f"Email notification sent to {notification_type} recipients: {recipients}")
+        except Exception as e:
+            print(f"Failed to send email {notification_type} notification: {str(e)}")
+
+    # Send Slack notification if webhook URL is provided
+    if slack_webhook:
+        try:
+            notifier = SlackNotifier(slack_webhook)
+            message = create_slack_message(
+                title=subject,
+                status=notification_type.upper(),
+                dag_id=context['dag_run'].dag_id,
+                run_id=context['dag_run'].run_id,
+                start_time=get_thai_time(),
+                # Add other relevant information based on notification type
+            )
+            notifier.send_message(message)
+        except Exception as e:
+            print(f"Failed to send Slack notification: {str(e)}")
 
 # Task notification handlers
-def send_running_notification(**context):
+def send_running_notification(default_emails, slack_webhook=None, **context):
     """Send notification when DAG starts running or resumes"""
     dag_run = context['dag_run']
     dag_id = dag_run.dag_id
@@ -376,16 +402,16 @@ def send_running_notification(**context):
         html_content = format_resume_message(dag_id, run_id, start_time, conf, previous_state)
         
         # Send resume notification
-        send_notification(subject, html_content, conf, 'resume')
+        send_notification(subject, html_content, conf, 'resume', default_emails, slack_webhook, context)
     else:
         print("No previous state found, sending start notification")
         subject = f"Batch Process {dag_id} Started at {format_thai_time(start_time)}"
         html_content = format_running_message(dag_id, run_id, start_time, conf)
         
         # Send start notification
-        send_notification(subject, html_content, conf, 'start')
+        send_notification(subject, html_content, conf, 'start', default_emails, slack_webhook, context)
 
-def send_success_notification(**context):
+def send_success_notification(default_emails, slack_webhook=None, **context):
     """Send success notification"""
     ti = context['task_instance']
     dag_run = context['dag_run']
@@ -432,12 +458,12 @@ def send_success_notification(**context):
     
     # Send success notification to both groups
     if conf.get('emailSuccess'):
-        send_notification(subject, html_content, conf, 'success')
+        send_notification(subject, html_content, conf, 'success', default_emails, slack_webhook, context)
     
     # Send to normal recipients
-    send_notification(subject, html_content, conf, 'normal')
+    send_notification(subject, html_content, conf, 'success', default_emails, slack_webhook, context)
 
-def send_failure_notification(**context):
+def send_failure_notification(default_emails, slack_webhook=None, **context):
     """Send failure or pause notification"""
     ti = context['task_instance']
     dag_run = context['dag_run']
@@ -446,12 +472,35 @@ def send_failure_notification(**context):
     conf = dag_run.conf or {}
     batch_state = get_batch_state(dag_id, run_id)
     
+
     start_time_str = ti.xcom_pull(key='batch_start_time')
-    start_time = datetime.fromisoformat(start_time_str)
+    if start_time_str:
+        start_time = datetime.fromisoformat(start_time_str)
+    else:
+        start_time = get_thai_time()
+
     end_time = get_thai_time()
     
     process_result = ti.xcom_pull(task_ids='process_data')
     error_message = ti.xcom_pull(key='error_message')
+
+# เช็คว่าเป็น error จาก validate_input หรือไม่
+    failed_task_id = context.get('task_instance').task_id
+    if failed_task_id == 'validate_input':
+        subject = f"Batch Process {dag_id} Validation Failed"
+        html_content = format_error_message(
+            dag_id=dag_id,
+            run_id=run_id,
+            start_time=start_time,
+            end_time=end_time,
+            error_message=error_message,
+            conf=conf,
+            batch_state=None
+        )
+        
+        # Send failure notification
+        send_notification(subject, html_content, conf, 'fail', default_emails, slack_webhook, context)
+        return
     
     # Check if this is a manual pause
     if is_manual_pause(error_message):
@@ -474,7 +523,7 @@ def send_failure_notification(**context):
         )
         
         # Send manual pause notification
-        send_notification(subject, html_content, conf, 'pause')
+        send_notification(subject, html_content, conf, 'pause', default_emails, slack_webhook, context)
         
     elif isinstance(process_result, dict) and process_result.get('status') == 'paused':
         # Regular pause case (time-based pause)
@@ -485,7 +534,7 @@ def send_failure_notification(**context):
         )
         
         # Send regular pause notification
-        send_notification(subject, html_content, conf, 'pause')
+        send_notification(subject, html_content, conf, 'pause', default_emails, slack_webhook, context)
         
     else:
         error_message = error_message or "Unknown error"
@@ -495,4 +544,4 @@ def send_failure_notification(**context):
         )
         
         # Send failure notification
-        send_notification(subject, html_content, conf, 'fail')
+        send_notification(subject, html_content, conf, 'fail', default_emails, slack_webhook, context)
