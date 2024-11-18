@@ -27,7 +27,16 @@ API_HEADERS = {
 OUTPUT_DIR = '/opt/airflow/output/batch_process'
 TEMP_DIR = '/opt/airflow/output/temp'
 CONTROL_DIR = '/opt/airflow/output/control'
+slack_webhook = "https://hooks.slack.com/services/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"
 
+default_emails = {
+    'email': ['phurinatkantapayao2@gmail.com'],
+    'emailSuccess': [],
+    'emailFail': [],
+    'emailPause': [],
+    'emailResume': [],
+    'emailStart': []
+}
 
 DEFAULT_CSV_COLUMNS = [
     'Status', 'RequestDateTime', 'BusinessCode', 'UserToken', 'RequestID', 
@@ -58,13 +67,16 @@ with DAG(
     validate_input = PythonOperator(
         task_id='validate_input',
         python_callable=validate_input_task,
-        provide_context=True
+        provide_context=True,
+        retries=1,
+        op_args=[DEFAULT_CSV_COLUMNS]
     )
     
     running_notification = PythonOperator(
         task_id='send_running_notification',
         python_callable=send_running_notification,
         provide_context=True,
+        op_args=[default_emails, slack_webhook],
         trigger_rule=TriggerRule.ALL_SUCCESS
     )
     
@@ -78,18 +90,11 @@ with DAG(
 
     )
     
-    check_pause_task = PythonOperator(
-        task_id='check_pause',
-        python_callable=check_pause_status,
-        provide_context=True,
-        trigger_rule=TriggerRule.ALL_SUCCESS,
-        retries=0
-    )
-    
     success_notification = PythonOperator(
         task_id='send_success_notification',
         python_callable=send_success_notification,
         provide_context=True,
+        op_args=[default_emails, slack_webhook],
         trigger_rule=TriggerRule.ALL_SUCCESS
     )
     
@@ -97,16 +102,16 @@ with DAG(
         task_id='send_failure_notification',
         python_callable=send_failure_notification,
         provide_context=True,
+        op_args=[default_emails, slack_webhook],
         trigger_rule=TriggerRule.ONE_FAILED
-    )    
-    
+    )
+
     uploadtoFTP = PythonOperator(
         task_id='uploadtoFTP',
         python_callable=upload_csv_ctrl_to_ftp_server,
         provide_context=True,
         
     )
-
     
     # Define Dependencies
     validate_input >> [running_notification, failure_notification]
