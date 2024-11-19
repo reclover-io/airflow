@@ -33,7 +33,7 @@ def list_files_on_server(ftp, path='/'):
     ftp.retrlines('LIST')
 
 def upload_csv_ctrl_to_ftp_server(**kwargs):
-    ftp_server = '34.124.138.144'
+    ftp_server = '192.168.0.100'
     username = 'airflow'
     password = 'airflow'
     ftp = connect_to_ftp(ftp_server, username, password)
@@ -49,11 +49,12 @@ def upload_csv_ctrl_to_ftp_server(**kwargs):
     print("control_filename :", output_filename_ctrl)
     print("dag_id :",dag_id)
     
-    csv_remote_path = f'/10.250.1.101/ELK/daily/source_data/landing/ELK_{dag_id}/'
-    ctrl_remote_path = f'/10.250.1.101/ELK/daily/source_data/landing/ELK_{dag_id}/'
+    csv_remote_path = f'/10.250.1.101/ELK/daily/source_data/landing/{dag_id}/'
+    ctrl_remote_path = f'/10.250.1.101/ELK/daily/source_data/landing/{dag_id}/'
 
-    csv_local_file_path = f'/opt/airflow/output/batch_process/{output_filename_csv}'
-    ctrl_local_file_path = f'/opt/airflow/output/control/{output_filename_ctrl}'
+    csv_local_file_path = f'/opt/airflow/data/batch/{dag_id}/{output_filename_csv}'
+    ctrl_local_file_path = f'/opt/airflow/data/batch/{dag_id}/{output_filename_ctrl}'
+
 
     upload_specific_file(ftp, csv_local_file_path, csv_remote_path)
     upload_specific_file(ftp, ctrl_local_file_path, ctrl_remote_path)
