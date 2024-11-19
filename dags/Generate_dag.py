@@ -41,9 +41,9 @@ API_HEADERS = {{
 }}
 
 # Output Configuration
-OUTPUT_DIR = f'/opt/airflow/data/batch/ELK_{{DAG_NAME}}'
+OUTPUT_DIR = f'/opt/airflow/data/batch/{{DAG_NAME}}'
 TEMP_DIR = f'/opt/airflow/data/batch/temp'
-CONTROL_DIR = f'/opt/airflow/data/batch/ELK_{{DAG_NAME}}'
+CONTROL_DIR = f'/opt/airflow/data/batch/{{DAG_NAME}}'
 slack_webhook = "https://hooks.slack.com/services/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"
 
 default_emails = {{
@@ -163,4 +163,3 @@ with DAG(
     )
 
 
-    
