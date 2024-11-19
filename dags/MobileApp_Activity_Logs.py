@@ -27,14 +27,14 @@ API_HEADERS = {
 OUTPUT_DIR = '/opt/airflow/output/batch_process'
 TEMP_DIR = '/opt/airflow/output/temp'
 CONTROL_DIR = '/opt/airflow/output/control'
-slack_webhook = "https://hooks.slack.com/services/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"
+slack_webhook = "https://hooks.slack.com/services/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"
 
 DEFAULT_CSV_COLUMNS = [
     'RequestID', 'Path', 'UserToken', 'RequestDateTime', '_id' , 'Status', 'CounterCode', 'Test'
 ]
 
 default_emails = {
-    'email': ['email@gmail.com'],
+    'email': ['phurinatkantapayao2@gmail.com'],
     'emailSuccess': [],
     'emailFail': [],
     'emailPause': [],
@@ -84,7 +84,7 @@ with DAG(
         python_callable=process_data,
         provide_context=True,
         retries=3,
-        op_args=[API_URL,TEMP_DIR,OUTPUT_DIR,CONTROL_DIR,API_HEADERS,DEFAULT_CSV_COLUMNS],
+        op_args=[API_URL,TEMP_DIR,OUTPUT_DIR,CONTROL_DIR,API_HEADERS,DEFAULT_CSV_COLUMNS, default_emails],
 
 
     )

@@ -215,37 +215,23 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
     should_write_header = True
     
     # ตรวจสอบ state และกำหนดค่าเริ่มต้น
-    if batch_state and batch_state['status'] == 'PAUSED':
-        # กรณีที่ resume จาก PAUSED
+    if batch_state:
+        # กรณีที่มี state อยู่แล้ว (ไม่ว่าจะเป็น PAUSED, RUNNING, หรือ FAILED)
         search_after = batch_state['last_search_after']
         page = batch_state['current_page']
-        total_records = batch_state['total_records']
+        # total_records = batch_state['total_records']
+        records, total, next_search_after = fetch_data_page(start_date, end_date, search_after, API_URL, API_HEADERS)
+        total_records = total
         fetched_count = batch_state['fetched_records']
-        print(f"Resuming from PAUSED state at page {page} with {fetched_count} records already fetched")
+        print(f"Resuming from state {state_status} at page {page} with {fetched_count} records already fetched")
         print(f"Last search after: {search_after}")
         
         if os.path.exists(temp_file_path):
-            print(f"Found existing temp file from PAUSED state: {temp_file_path}")
+            print(f"Found existing temp file: {temp_file_path}")
             should_write_header = False
             print("Will append to existing file without header")
         else:
-            print("Warning: No temp file found from PAUSED state, starting with new file")
-            should_write_header = True
-            
-    elif batch_state and batch_state['status'] == 'RUNNING':
-        # กรณีที่ resume จาก RUNNING (error case)
-        search_after = batch_state['last_search_after']
-        page = batch_state['current_page']
-        total_records = batch_state['total_records']
-        fetched_count = batch_state['fetched_records']
-        print(f"Resuming from RUNNING state at page {page}")
-        print(f"Last search after: {search_after}")
-        
-        if os.path.exists(temp_file_path):
-            should_write_header = False
-            print("Will append to existing file without header")
-        else:
-            print("Warning: No temp file found from RUNNING state, starting with new file")
+            print("Warning: No temp file found, starting with new file")
             should_write_header = True
             
     else:

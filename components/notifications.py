@@ -80,7 +80,7 @@ def format_running_message(dag_id: str, run_id: str, start_time: datetime, conf:
 
 def format_success_message(dag_id: str, run_id: str, current_time: datetime, 
                          conf: Dict, csv_filename: str, control_filename: str,
-                         batch_state: Optional[Dict] = None) -> str:
+                         batch_state: Optional[Dict] = None, ftp_status: str = None) -> str:
     """Format success notification message with processing details"""
     # Get initial start time
     start_time = get_initial_start_time(dag_id, run_id)
@@ -140,6 +140,7 @@ def format_success_message(dag_id: str, run_id: str, current_time: datetime,
             <li>Start Date: {conf.get('startDate')}</li>
             <li>End Date: {conf.get('endDate')}</li>
             <li>Pause Time: {conf.get('pause', 'Not specified')}</li>
+            <li>FTP Enabled: {conf.get('ftp', True)}</li>
         </ul>
     """
 
@@ -444,6 +445,9 @@ def send_success_notification(default_emails, slack_webhook=None, **context):
     
     # Get batch state for progress information and initial start time
     batch_state = get_batch_state(dag_id, run_id)
+
+    should_upload_ftp = ti.xcom_pull(key='should_upload_ftp', task_ids='validate_input')
+    ftp_status = "FTP upload skipped (disabled in config)" if not should_upload_ftp else "FTP upload completed"
     
     if batch_state and batch_state.get('initial_start_time'):
         if isinstance(batch_state['initial_start_time'], str):
@@ -467,15 +471,18 @@ def send_success_notification(default_emails, slack_webhook=None, **context):
         conf, 
         csv_filename,
         control_filename,
-        batch_state
+        batch_state,
+        ftp_status
     )
     
-    # Send success notification to both groups
+    # Send to normal recipients
+    send_notification(subject, html_content, conf, 'normal', default_emails, None, context)
+
     if conf.get('emailSuccess'):
         send_notification(subject, html_content, conf, 'success', default_emails, slack_webhook, context)
-    
-    # Send to normal recipients
-    send_notification(subject, html_content, conf, 'success', default_emails, slack_webhook, context)
+
+    if slack_webhook:
+        send_notification(subject, html_content, conf, 'SUCCESS', default_emails, slack_webhook, context)
 
 def send_failure_notification(default_emails, slack_webhook=None, **context):
     """Send failure or pause notification"""

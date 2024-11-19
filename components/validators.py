@@ -323,10 +323,9 @@ def validate_config(conf: Dict, DEFAULT_CSV_COLUMNS: List[str], context: Dict) -
     if not is_valid:
         return False, error_message
     
-    if 'ftp' in conf:
-        is_valid, error_message = validate_ftp_config(conf, context)
-        if not is_valid:
-            return False, error_message
+    is_valid, error_message = validate_ftp_config(conf, context)
+    if not is_valid:
+        return False, error_message
     
     return True, None
 
@@ -384,6 +383,7 @@ def validate_ftp_config(conf: Dict, context: Dict) -> Tuple[bool, Optional[str]]
 
         # Store FTP setting in XCom with default as True if not specified
         should_upload_ftp = conf.get('ftp', True)
+        print(should_upload_ftp)
         ti = context.get('task_instance')
         if ti:
             ti.xcom_push(key='should_upload_ftp', value=should_upload_ftp)
