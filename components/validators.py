@@ -1,5 +1,5 @@
 from typing import Dict, List, Tuple, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 import re
 from airflow.exceptions import AirflowException
 
@@ -261,8 +261,36 @@ def get_csv_columns(conf: Dict , DEFAULT_CSV_COLUMNS: List[str]) -> List[str]:
     
     return csv_columns
 
+def get_default_config(execution_date: datetime) -> Dict:
+    """
+    Generate default configuration based on execution date
+    For daily batch, will get data from previous day
+    """
+    # Get previous day
+    prev_day = execution_date - timedelta(days=1)
+    
+    # Format start date and end date
+    start_date = prev_day.replace(
+        hour=0, 
+        minute=0, 
+        second=0, 
+        microsecond=0
+    ).strftime('%Y-%m-%d %H:%M:%S.000')
+    
+    end_date = prev_day.replace(
+        hour=23, 
+        minute=59, 
+        second=59, 
+        microsecond=999000
+    ).strftime('%Y-%m-%d %H:%M:%S.999')
+    
+    return {
+        'startDate': start_date,
+        'endDate': end_date
+    }
+
 # Main validation function
-def validate_config(conf: Dict, DEFAULT_CSV_COLUMNS: List[str]) -> Tuple[bool, Optional[str]]:
+def validate_config(conf: Dict, DEFAULT_CSV_COLUMNS: List[str], context: Dict) -> Tuple[bool, Optional[str]]:
     """
     Validate all configuration parameters
     Returns (is_valid, error_message)
@@ -295,21 +323,46 @@ def validate_config(conf: Dict, DEFAULT_CSV_COLUMNS: List[str]) -> Tuple[bool, O
     if not is_valid:
         return False, error_message
     
+    if 'ftp' in conf:
+        is_valid, error_message = validate_ftp_config(conf, context)
+        if not is_valid:
+            return False, error_message
+    
     return True, None
 
-def validate_input_task(default_csv_columns, **context):
+def validate_input_task(default_csv_columns: List[str], default_emails: Dict[str, List[str]], **context):
     """Validate input configuration using existing validate_config function"""
     try:
         dag_run = context['dag_run']
-        conf = dag_run.conf or {}
+        
+        # Get execution date from context
+        execution_date = context['execution_date']
+        
+        # If no config provided, use default config
+        if not dag_run.conf:
+            default_config = get_default_config(execution_date)
+            # Add default email configuration
+            # default_config.update({
+            #     'email': default_emails.get('email', []),
+            #     'emailSuccess': default_emails.get('emailSuccess', []),
+            #     'emailFail': default_emails.get('emailFail', []),
+            #     'emailPause': default_emails.get('emailPause', []),
+            #     'emailResume': default_emails.get('emailResume', []),
+            #     'emailStart': default_emails.get('emailStart', [])
+            # })
+            dag_run.conf = default_config
+            print(f"Using default configuration: {default_config}")
+        
+        conf = dag_run.conf
         
         # Use existing validate_config function
-        is_valid, error_message = validate_config(conf, default_csv_columns)
+        is_valid, error_message = validate_config(conf, default_csv_columns, context)
         
         if not is_valid:
             context['task_instance'].xcom_push(key='error_message', value=error_message)
             raise AirflowException(f"Configuration validation failed: {error_message}")
             
+        # If validation passed, store result in XCom
         context['task_instance'].xcom_push(key='validation_result', value=True)
         
     except Exception as e:
@@ -318,3 +371,26 @@ def validate_input_task(default_csv_columns, **context):
             error_msg = f"Unexpected error during validation: {error_msg}"
         context['task_instance'].xcom_push(key='error_message', value=error_msg)
         raise AirflowException(error_msg)
+    
+def validate_ftp_config(conf: Dict, context: Dict) -> Tuple[bool, Optional[str]]:
+    """
+    Validate FTP configuration and store setting in XCom
+    Returns (is_valid, error_message)
+    """
+    try:
+        ftp_value = conf.get('ftp')
+        if ftp_value is not None and not isinstance(ftp_value, bool):
+            return False, "FTP configuration must be a boolean (true/false)"
+
+        # Store FTP setting in XCom with default as True if not specified
+        should_upload_ftp = conf.get('ftp', True)
+        ti = context.get('task_instance')
+        if ti:
+            ti.xcom_push(key='should_upload_ftp', value=should_upload_ftp)
+            print(f"Stored FTP setting in XCom: {should_upload_ftp}")
+        else:
+            print("Warning: task_instance not found in context")
+        return True, None
+
+    except Exception as e:
+        return False, f"Failed to validate FTP configuration: {str(e)}"

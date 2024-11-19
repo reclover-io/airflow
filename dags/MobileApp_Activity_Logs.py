@@ -27,14 +27,14 @@ API_HEADERS = {
 OUTPUT_DIR = '/opt/airflow/output/batch_process'
 TEMP_DIR = '/opt/airflow/output/temp'
 CONTROL_DIR = '/opt/airflow/output/control'
-slack_webhook = "https://hooks.slack.com/services/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"
+slack_webhook = "https://hooks.slack.com/services/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"
 
 DEFAULT_CSV_COLUMNS = [
     'RequestID', 'Path', 'UserToken', 'RequestDateTime', '_id' , 'Status', 'CounterCode', 'Test'
 ]
 
 default_emails = {
-    'email': ['phurinatkantapayao2@gmail.com'],
+    'email': ['email@gmail.com'],
     'emailSuccess': [],
     'emailFail': [],
     'emailPause': [],
@@ -57,7 +57,7 @@ with DAG(
     DAG_NAME,
     default_args=default_args,
     description='Fetch API data with date range and save to CSV',
-    schedule_interval=None,
+    schedule_interval="32 11 * * *",
     start_date=datetime(2024, 1, 1),
     catchup=False,
     tags=['api', 'csv', 'backup']
@@ -68,7 +68,7 @@ with DAG(
         python_callable=validate_input_task,
         provide_context=True,
         retries=1,
-        op_args=[DEFAULT_CSV_COLUMNS]
+        op_args=[DEFAULT_CSV_COLUMNS, default_emails]
     )
     
     running_notification = PythonOperator(
@@ -94,7 +94,7 @@ with DAG(
         python_callable=send_success_notification,
         provide_context=True,
         op_args=[default_emails, slack_webhook],
-        trigger_rule=TriggerRule.ALL_SUCCESS
+        trigger_rule=TriggerRule.NONE_FAILED_OR_SKIPPED
     )
     
     failure_notification = PythonOperator(
@@ -109,6 +109,7 @@ with DAG(
         task_id='uploadtoFTP',
         python_callable=upload_csv_ctrl_to_ftp_server,
         provide_context=True,
+        trigger_rule=TriggerRule.ALL_SUCCESS
         
     )
     
@@ -116,3 +117,4 @@ with DAG(
     validate_input >> [running_notification, failure_notification]
     running_notification >> process_task >> [uploadtoFTP, failure_notification]
     uploadtoFTP >> [success_notification, failure_notification]
+    process_task >> success_notification

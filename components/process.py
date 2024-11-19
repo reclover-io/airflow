@@ -444,13 +444,6 @@ def process_data(API_URL: str, TEMP_DIR: str, OUTPUT_DIR: str,CONTROL_DIR: str, 
         ti = kwargs['task_instance']
         dag_run = kwargs['dag_run']
         conf = dag_run.conf or {}
-
-        # Validate configuration
-        is_valid, error_message = validate_config(conf,DEFAULT_CSV_COLUMNS)
-        if not is_valid:
-            print(f"Configuration validation failed: {error_message}")
-            ti.xcom_push(key='error_message', value=f"Configuration Error: {error_message}")
-            raise AirflowException(f"Configuration Error: {error_message}")
         
         start_date = conf.get('startDate')
         end_date = conf.get('endDate')

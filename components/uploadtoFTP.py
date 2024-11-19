@@ -1,5 +1,6 @@
 from ftplib import FTP
 import os
+from airflow.exceptions import AirflowSkipException
 
 def connect_to_ftp(server, username, password):
     ftp = FTP(server)
@@ -33,6 +34,8 @@ def list_files_on_server(ftp, path='/'):
     ftp.retrlines('LIST')
 
 def upload_csv_ctrl_to_ftp_server(**kwargs):
+    """Upload files to FTP with skip check"""
+    
     ftp_server = '34.124.138.144'
     username = 'airflow'
     password = 'airflow'
@@ -40,6 +43,12 @@ def upload_csv_ctrl_to_ftp_server(**kwargs):
 
     ti = kwargs['task_instance']
     dag_id = ti.dag_id
+        
+    # เช็คว่าต้อง skip task นี้หรือไม่
+    should_upload_ftp = ti.xcom_pull(key='should_upload_ftp', task_ids='validate_input')
+    if not should_upload_ftp:
+        print("Skipping FTP upload as configured (ftp: false)")
+        raise AirflowSkipException("FTP upload disabled in configuration")
 
     output_filename_csv = ti.xcom_pull(dag_id={dag_id}, key='output_filename')
     print("output_filename :", output_filename_csv)

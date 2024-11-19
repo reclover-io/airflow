@@ -27,10 +27,10 @@ API_HEADERS = {
 OUTPUT_DIR = '/opt/airflow/output/batch_process'
 TEMP_DIR = '/opt/airflow/output/temp'
 CONTROL_DIR = '/opt/airflow/output/control'
-slack_webhook = "https://hooks.slack.com/services/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"
+slack_webhook = "https://hooks.slack.com/services/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"
 
 default_emails = {
-    'email': ['phurinatkantapayao2@gmail.com'],
+    'email': ['email@gmail.com'],
     'emailSuccess': [],
     'emailFail': [],
     'emailPause': [],
@@ -95,7 +95,7 @@ with DAG(
         python_callable=send_success_notification,
         provide_context=True,
         op_args=[default_emails, slack_webhook],
-        trigger_rule=TriggerRule.ALL_SUCCESS
+        trigger_rule=TriggerRule.NONE_FAILED_OR_SKIPPED
     )
     
     failure_notification = PythonOperator(
@@ -117,3 +117,4 @@ with DAG(
     validate_input >> [running_notification, failure_notification]
     running_notification >> process_task >> [uploadtoFTP, failure_notification]
     uploadtoFTP >> [success_notification, failure_notification]
+    process_task >> success_notification

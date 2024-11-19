@@ -354,7 +354,7 @@ def send_notification(
     notification_type: str, 
     default_emails: Dict[str, List[str]],
     slack_webhook: Optional[str] = None,
-    context: Optional[Dict] = None  # เพิ่ม context parameter
+    context: Optional[Dict] = None
 ):
     """Send notification to appropriate recipients based on type"""
     # Send email notification
@@ -367,16 +367,30 @@ def send_notification(
             print(f"Failed to send email {notification_type} notification: {str(e)}")
 
     # Send Slack notification if webhook URL is provided
-    if slack_webhook:
+    if slack_webhook and context:
         try:
+            dag_run = context['dag_run']
+            ti = context['task_instance']
+            
+            # Get batch state
+            batch_state = get_batch_state(dag_run.dag_id, dag_run.run_id)
+            
+            # Get start and end times
+            start_time_str = ti.xcom_pull(key='batch_start_time')
+            start_time = datetime.fromisoformat(start_time_str) if start_time_str else get_thai_time()
+            end_time = get_thai_time()
+
             notifier = SlackNotifier(slack_webhook)
             message = create_slack_message(
                 title=subject,
                 status=notification_type.upper(),
-                dag_id=context['dag_run'].dag_id,
-                run_id=context['dag_run'].run_id,
-                start_time=get_thai_time(),
-                # Add other relevant information based on notification type
+                dag_id=dag_run.dag_id,
+                run_id=dag_run.run_id,
+                start_time=start_time,
+                end_time=end_time,
+                error_message=ti.xcom_pull(key='error_message'),
+                conf=conf,
+                batch_state=batch_state
             )
             notifier.send_message(message)
         except Exception as e:
