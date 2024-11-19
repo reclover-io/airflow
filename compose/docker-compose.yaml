@@ -37,6 +37,7 @@ x-airflow-common:
     - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
     - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
     - ${AIRFLOW_PROJ_DIR:-.}/output:/opt/airflow/output
+    - ${AIRFLOW_PROJ_DIR:-.}/data:/opt/airflow/data
     - ${AIRFLOW_PROJ_DIR:-.}/components:/opt/airflow/components
     - ${AIRFLOW_PROJ_DIR:-.}/certs/airflow.pem:/opt/airflow/airflow.pem:ro
     - ${AIRFLOW_PROJ_DIR:-.}/certs/airflow.key:/opt/airflow/airflow.key:ro
@@ -296,7 +297,7 @@ services:
     environment:
       FTP_USER: "airflow"
       FTP_PASS: "airflow"
-      PASV_ADDRESS: "34.124.138.144"
+      PASV_ADDRESS: "192.168.0.100"
       PASV_MIN_PORT: 21100
       PASV_MAX_PORT: 21110
       FTP_MAX_CLIENTS: 10
