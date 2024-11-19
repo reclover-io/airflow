@@ -297,7 +297,7 @@ services:
     environment:
       FTP_USER: "airflow"
       FTP_PASS: "airflow"
-      PASV_ADDRESS: "192.168.0.100"
+      PASV_ADDRESS: "34.124.138.144"
       PASV_MIN_PORT: 21100
       PASV_MAX_PORT: 21110
       FTP_MAX_CLIENTS: 10

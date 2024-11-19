@@ -33,7 +33,7 @@ def list_files_on_server(ftp, path='/'):
     ftp.retrlines('LIST')
 
 def upload_csv_ctrl_to_ftp_server(**kwargs):
-    ftp_server = '192.168.0.100'
+    ftp_server = '34.124.138.144'
     username = 'airflow'
     password = 'airflow'
     ftp = connect_to_ftp(ftp_server, username, password)
