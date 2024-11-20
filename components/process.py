@@ -28,6 +28,8 @@ from components.constants import (
     PAGE_SIZE
 )
 
+from components.notifications import send_retry_notification
+
 class APIException(Exception):
     pass
 
@@ -318,6 +320,8 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
                     total_records=total_records,
                     fetched_records=fetched_count
                 )
+
+
                 raise e
             
             if handle_pause(conf, state_status, dag_id, run_id):
@@ -424,7 +428,7 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
         )
         raise e
 
-def process_data(API_URL: str, TEMP_DIR: str, OUTPUT_DIR: str,CONTROL_DIR: str, API_HEADERS: Dict[str, str], DEFAULT_CSV_COLUMNS: List[str], **kwargs):
+def process_data(API_URL: str, TEMP_DIR: str, OUTPUT_DIR: str,CONTROL_DIR: str, API_HEADERS: Dict[str, str], DEFAULT_CSV_COLUMNS: List[str], default_emails: Dict[str, List[str]], slack_webhook: Optional[str] = None, **kwargs):
     """Process the data and handle notifications""" 
     try:
         ti = kwargs['task_instance']
@@ -490,6 +494,23 @@ def process_data(API_URL: str, TEMP_DIR: str, OUTPUT_DIR: str,CONTROL_DIR: str, 
         except Exception as e:
             error_msg = str(e)
             ti.xcom_push(key='error_message', value=error_msg)
+            try_number = ti.try_number
+            max_retries = ti.max_tries
+            
+            # Send retry notification if this is not the last retry
+            if try_number <= max_retries:
+                send_retry_notification(
+                    dag_id=dag_run.dag_id,
+                    run_id=run_id,
+                    error_message=error_msg,
+                    retry_count=try_number,  # try_number starts from 1
+                    max_retries=max_retries,  # exclude the initial try
+                    conf=conf,
+                    default_emails=default_emails,
+                    slack_webhook=slack_webhook,
+                    context=kwargs
+                )
+
             raise AirflowException(error_msg)
             
     except Exception as e:

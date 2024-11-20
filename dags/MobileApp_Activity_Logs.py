@@ -2,6 +2,7 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.utils.trigger_rule import TriggerRule
 from datetime import datetime, timedelta
+from airflow.sensors.time_sensor import TimeSensor
 import pytz
 
 from components.notifications import (
@@ -52,6 +53,8 @@ default_args = {
     'retry_delay': timedelta(seconds=1)
 }
 
+
+
 # Create the DAG
 with DAG(
     DAG_NAME,
@@ -84,7 +87,7 @@ with DAG(
         python_callable=process_data,
         provide_context=True,
         retries=3,
-        op_args=[API_URL,TEMP_DIR,OUTPUT_DIR,CONTROL_DIR,API_HEADERS,DEFAULT_CSV_COLUMNS, default_emails],
+        op_args=[API_URL,TEMP_DIR,OUTPUT_DIR,CONTROL_DIR,API_HEADERS,DEFAULT_CSV_COLUMNS, default_emails, slack_webhook],
 
 
     )

@@ -5,7 +5,7 @@ from airflow.exceptions import AirflowException
 import pytz
 from typing import Dict, List, Optional, Tuple
 from components.constants import THAI_TZ
-from components.process import is_manual_pause
+#from components.process import is_manual_pause
 from components.database import save_batch_state
 
 from components.database import get_batch_state , get_initial_start_time
@@ -334,6 +334,37 @@ def format_resume_message(dag_id: str, run_id: str, start_time: datetime, conf: 
             <li>Pause Time: {conf.get('pause', 'Not specified')}</li>
         </ul>
     """
+def format_retry_message(dag_id: str, run_id: str, error_message: str, 
+                        retry_count: int, max_retries: int,
+                        batch_state: Optional[Dict] = None) -> str:
+    """Format retry notification message"""
+    current_time = get_thai_time()
+    
+    # Get progress information
+    fetched_records = batch_state.get('fetched_records', 0) if batch_state else 0
+    total_records = batch_state.get('total_records') if batch_state else None
+    current_page = batch_state.get('current_page', 1) if batch_state else 1
+    
+    # Calculate progress percentage
+    progress = (fetched_records / total_records * 100) if total_records and total_records > 0 else 0
+    
+    return f"""
+        <h2>Batch Process {dag_id} Failed - Retrying</h2>
+        <p><strong>Batch Process:</strong> {dag_id}</p>
+        <p><strong>Run ID:</strong> {run_id}</p>
+        <p><strong>Time:</strong> {format_thai_time(current_time)}</p>
+        <p><strong>Status:</strong> Retry {retry_count} of {max_retries}</p>
+        <p><strong>Error Message:</strong> {error_message}</p>
+        
+        <h3>Current Progress:</h3>
+        <ul>
+            <li>Records Processed: {fetched_records:,} {f'/ {total_records:,}' if total_records else ''}</li>
+            <li>Progress: {progress:.2f}%</li>
+            <li>Current Page: {current_page}</li>
+        </ul>
+        
+        <p>System will automatically retry the process.</p>
+    """
 
 # Main notification functions
 def send_email_notification(to: List[str], subject: str, html_content: str):
@@ -484,6 +515,17 @@ def send_success_notification(default_emails, slack_webhook=None, **context):
     if slack_webhook:
         send_notification(subject, html_content, conf, 'SUCCESS', default_emails, slack_webhook, context)
 
+def is_manual_pause(error_message: Optional[str]) -> bool:
+    """
+    Check if the error is from manual pause (SIGTERM)
+    """
+    sigterm_messages = [
+        "Task received SIGTERM signal",
+        "Task received SIGKILL signal",
+        "Task was cancelled externally"
+    ]
+    return error_message and any(msg in error_message for msg in sigterm_messages)
+
 def send_failure_notification(default_emails, slack_webhook=None, **context):
     """Send failure or pause notification"""
     ti = context['task_instance']
@@ -566,3 +608,24 @@ def send_failure_notification(default_emails, slack_webhook=None, **context):
         
         # Send failure notification
         send_notification(subject, html_content, conf, 'fail', default_emails, slack_webhook, context)
+
+def send_retry_notification(dag_id: str, run_id: str, error_message: str,
+                          retry_count: int, max_retries: int,
+                          conf: Dict, default_emails: Dict[str, List[str]],
+                          slack_webhook: Optional[str] = None,
+                          context: Optional[Dict] = None):
+    """Send notification for retry attempts"""
+    batch_state = get_batch_state(dag_id, run_id)
+    
+    subject = f"Batch Process {dag_id} Failed - Retry {retry_count}/{max_retries}"
+    html_content = format_retry_message(
+        dag_id=dag_id,
+        run_id=run_id,
+        error_message=error_message,
+        retry_count=retry_count,
+        max_retries=max_retries,
+        batch_state=batch_state
+    )
+    
+    # Send to failure notification recipients
+    send_notification(subject, html_content, conf, 'fail', default_emails, slack_webhook, context)
