@@ -28,7 +28,7 @@ API_HEADERS = {
 OUTPUT_DIR = '/opt/airflow/output/batch_process'
 TEMP_DIR = '/opt/airflow/output/temp'
 CONTROL_DIR = '/opt/airflow/output/control'
-slack_webhook = "https://hooks.slack.com/services/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"
+slack_webhook = ""
 
 DEFAULT_CSV_COLUMNS = [
     'RequestID', 'Path', 'UserToken', 'RequestDateTime', '_id' , 'Status', 'CounterCode', 'Test'
@@ -112,6 +112,7 @@ with DAG(
         task_id='uploadtoFTP',
         python_callable=upload_csv_ctrl_to_ftp_server,
         provide_context=True,
+        op_args=[default_emails, slack_webhook],
         trigger_rule=TriggerRule.ALL_SUCCESS
         
     )

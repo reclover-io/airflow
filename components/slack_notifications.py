@@ -1,24 +1,26 @@
 import requests
 from typing import Dict, Optional
 from datetime import datetime
+from airflow.exceptions import AirflowException
 
 class SlackNotifier:
     def __init__(self, webhook_url: str):
         self.webhook_url = webhook_url
 
-    def send_message(self, message: Dict) -> bool:
+    def send_message(self, message: Dict) -> None:
         """Send message to Slack"""
         try:
             response = requests.post(self.webhook_url, json=message)
             if response.status_code == 200:
                 print("Message sent to Slack successfully")
-                return True
             else:
-                print(f"Failed to send message to Slack: {response.status_code}")
-                return False
+                error_msg = f"Failed to send message to Slack: Status code {response.status_code}"
+                print(error_msg)
+                raise AirflowException(error_msg)
         except Exception as e:
-            print(f"Error sending message to Slack: {str(e)}")
-            return False
+            error_msg = f"Error sending message to Slack: {str(e)}"
+            print(error_msg)
+            raise AirflowException(error_msg)
 
 def create_slack_message(
     title: str,

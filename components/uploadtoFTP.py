@@ -1,6 +1,9 @@
-from ftplib import FTP
+from ftplib import FTP, error_perm, error_temp
 import os
-from airflow.exceptions import AirflowSkipException
+from airflow.exceptions import AirflowSkipException, AirflowException
+from typing import Optional, Dict, List
+
+from components.notifications import send_retry_notification
 
 def connect_to_ftp(server, username, password):
     ftp = FTP(server)
@@ -33,43 +36,97 @@ def list_files_on_server(ftp, path='/'):
     ftp.cwd(path)
     ftp.retrlines('LIST')
 
-def upload_csv_ctrl_to_ftp_server(**kwargs):
-    """Upload files to FTP with skip check"""
-    
-    ftp_server = '34.124.138.144'
-    username = 'airflow'
-    password = 'airflow'
-    ftp = connect_to_ftp(ftp_server, username, password)
-
-    ti = kwargs['task_instance']
-    dag_id = ti.dag_id
+def upload_csv_ctrl_to_ftp_server(default_emails: Dict[str, List[str]], 
+                                slack_webhook: Optional[str] = None,
+                                **kwargs):
+    """Upload files to FTP with error handling and notifications"""
+    try:
+        ti = kwargs['task_instance']
+        dag_run = kwargs['dag_run']
+        dag_id = ti.dag_id
+        run_id = dag_run.run_id
+        conf = dag_run.conf or {}
         
-    # เช็คว่าต้อง skip task นี้หรือไม่
-    should_upload_ftp = ti.xcom_pull(key='should_upload_ftp', task_ids='validate_input')
-    if not should_upload_ftp:
-        print("Skipping FTP upload as configured (ftp: false)")
-        raise AirflowSkipException("FTP upload disabled in configuration")
+        # เช็คว่าต้อง skip task นี้หรือไม่
+        should_upload_ftp = ti.xcom_pull(key='should_upload_ftp', task_ids='validate_input')
+        if not should_upload_ftp:
+            print("Skipping FTP upload as configured (ftp: false)")
+            raise AirflowSkipException("FTP upload disabled in configuration")
 
-    output_filename_csv = ti.xcom_pull(dag_id={dag_id}, key='output_filename')
-    print("output_filename :", output_filename_csv)
-    print("dag_id :",dag_id)
+        # Get file names
+        output_filename_csv = ti.xcom_pull(dag_id=dag_id, key='output_filename')
+        output_filename_ctrl = ti.xcom_pull(dag_id=dag_id, key='control_filename')
 
-    output_filename_ctrl = ti.xcom_pull(dag_id={dag_id},key='control_filename')
-    print("control_filename :", output_filename_ctrl)
-    print("dag_id :",dag_id)
-    
-    csv_remote_path = f'/10.250.1.101/ELK/daily/source_data/landing/ELK_{dag_id}/'
-    ctrl_remote_path = f'/10.250.1.101/ELK/daily/source_data/landing/ELK_{dag_id}/'
+        if not output_filename_csv or not output_filename_ctrl:
+            raise AirflowException("Missing file names from previous tasks")
 
-    csv_local_file_path = f'/opt/airflow/output/batch_process/{output_filename_csv}'
-    ctrl_local_file_path = f'/opt/airflow/output/control/{output_filename_ctrl}'
+        print("output_filename:", output_filename_csv)
+        print("control_filename:", output_filename_ctrl)
+        print("dag_id:", dag_id)
 
-    upload_specific_file(ftp, csv_local_file_path, csv_remote_path)
-    upload_specific_file(ftp, ctrl_local_file_path, ctrl_remote_path)
+        # Prepare paths
+        csv_remote_path = f'/10.250.1.101/ELK/daily/source_data/landing/ELK_{dag_id}/'
+        ctrl_remote_path = f'/10.250.1.101/ELK/daily/source_data/landing/ELK_{dag_id}/'
+        csv_local_file_path = f'/opt/airflow/output/batch_process/{output_filename_csv}'
+        ctrl_local_file_path = f'/opt/airflow/output/control/{output_filename_ctrl}'
 
-    list_files_on_server(ftp)
+        # Verify local files exist
+        if not os.path.exists(csv_local_file_path):
+            raise FileNotFoundError(f"CSV file not found: {csv_local_file_path}")
+        if not os.path.exists(ctrl_local_file_path):
+            raise FileNotFoundError(f"Control file not found: {ctrl_local_file_path}")
 
-    ftp.quit()
-
-if __name__ == "__main__":
-    upload_csv_ctrl_to_ftp_server()
+        try:
+            # Connect to FTP
+            ftp_server = '34.124.138.144'
+            username = 'airflow'
+            password = 'airflow'
+            ftp = connect_to_ftp(ftp_server, username, password)
+            
+            try:
+                # Upload files
+                print("Uploading CSV file...")
+                upload_specific_file(ftp, csv_local_file_path, csv_remote_path)
+                
+                print("Uploading Control file...")
+                upload_specific_file(ftp, ctrl_local_file_path, ctrl_remote_path)
+                
+                print("Listing files on server...")
+                list_files_on_server(ftp)
+                
+            except (error_perm, error_temp) as e:
+                raise AirflowException(f"FTP upload error: {str(e)}")
+            finally:
+                try:
+                    ftp.quit()
+                except:
+                    pass  # Ignore errors during quit
+                    
+        except Exception as e:
+            raise AirflowException(f"FTP connection error: {str(e)}")
+            
+    except Exception as e:
+        error_msg = str(e)
+        ti.xcom_push(key='error_message', value=error_msg)
+        
+        # Don't send retry notification for skipped tasks
+        if not isinstance(e, AirflowSkipException):
+            # Get retry information
+            try_number = ti.try_number
+            max_retries = ti.max_tries
+            
+            # Send retry notification if this is not the last retry
+            if try_number <= max_retries:
+                send_retry_notification(
+                    dag_id=dag_id,
+                    run_id=run_id,
+                    error_message=error_msg,
+                    retry_count=try_number,
+                    max_retries=max_retries,
+                    conf=conf,
+                    default_emails=default_emails,
+                    slack_webhook=slack_webhook,
+                    context=kwargs
+                )
+        
+        raise

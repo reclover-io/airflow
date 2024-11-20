@@ -389,14 +389,23 @@ def send_notification(
     context: Optional[Dict] = None
 ):
     """Send notification to appropriate recipients based on type"""
+
+    email_sent = False
+    slack_sent = False
+    errors = []
+
     # Send email notification
     recipients = get_notification_recipients(conf, notification_type, default_emails)
     if recipients:
         try:
             send_email_notification(recipients, subject, html_content)
             print(f"Email notification sent to {notification_type} recipients: {recipients}")
+            email_sent = True
+
         except Exception as e:
+            error_msg = f"Failed to send email notification: {str(e)}"
             print(f"Failed to send email {notification_type} notification: {str(e)}")
+            errors.append(error_msg)
 
     # Send Slack notification if webhook URL is provided
     if slack_webhook and context:
@@ -425,8 +434,16 @@ def send_notification(
                 batch_state=batch_state
             )
             notifier.send_message(message)
+            slack_sent = True
         except Exception as e:
+            error_msg = f"Failed to send Slack notification: {str(e)}"
             print(f"Failed to send Slack notification: {str(e)}")
+            errors.append(error_msg)
+            raise AirflowException(error_msg)
+        
+    if (not email_sent and not slack_sent) or (slack_webhook and not slack_sent):
+        error_msg = "Failed to send notifications:\n" + "\n".join(errors)
+        raise AirflowException(error_msg)
 
 # Task notification handlers
 def send_running_notification(default_emails, slack_webhook=None, **context):
