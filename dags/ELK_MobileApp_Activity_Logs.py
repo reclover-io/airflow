@@ -25,9 +25,9 @@ API_HEADERS = {
 }
 
 # Output Configuration
-OUTPUT_DIR = '/opt/airflow/output/batch_process'
-TEMP_DIR = '/opt/airflow/output/temp'
-CONTROL_DIR = '/opt/airflow/output/control'
+OUTPUT_DIR = f'/opt/airflow/data/batch/{DAG_NAME}'
+TEMP_DIR = f'/opt/airflow/data/batch/temp'
+CONTROL_DIR = f'/opt/airflow/data/batch/{DAG_NAME}'
 slack_webhook = ""
 
 DEFAULT_CSV_COLUMNS = [
