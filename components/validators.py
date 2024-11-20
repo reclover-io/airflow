@@ -76,23 +76,28 @@ def validate_config_dates(conf: Dict) -> Tuple[bool, Optional[str]]:
     Validate date configurations
     Returns (is_valid, error_message)
     """
+    errors = []
     start_date = conf.get('startDate')
     end_date = conf.get('endDate')
     
     # Validate start date format
     start_valid, start_error = validate_datetime_format(start_date, 'startDate')
     if not start_valid:
-        return False, start_error
+        errors.append(start_error)
         
     # Validate end date format
     end_valid, end_error = validate_datetime_format(end_date, 'endDate')
     if not end_valid:
-        return False, end_error
+        errors.append(end_error)
         
     # Validate date range
-    range_valid, range_error = validate_date_range(start_date, end_date)
-    if not range_valid:
-        return False, range_error
+    if start_valid and end_valid:
+        range_valid, range_error = validate_date_range(start_date, end_date)
+        if not range_valid:
+            errors.append(range_error)
+    
+    if errors:
+        return False, "\n".join(errors)
         
     return True, None
 
@@ -295,36 +300,45 @@ def validate_config(conf: Dict, DEFAULT_CSV_COLUMNS: List[str], context: Dict) -
     Validate all configuration parameters
     Returns (is_valid, error_message)
     """
+
+    errors = []
+
     # Validate emails
     is_valid, error_message = validate_email_config(conf)
     if not is_valid:
-        return False, error_message
+        errors.append(f"Email Configuration Error: {error_message}")
     
     # Validate dates
     is_valid, error_message = validate_config_dates(conf)
     if not is_valid:
-        return False, error_message
+        errors.append(f"Date Configuration Error: {error_message}")
     
     # Validate CSV columns
     if 'csvColumn' in conf:
         is_valid, error_message = validate_csv_columns(conf, DEFAULT_CSV_COLUMNS)
         if not is_valid:
-            return False, error_message
+            errors.append(f"CSV Columns Error: {error_message}")
     
     # Validate pause time
     pause_time = conf.get('pause')
     is_valid, error_message = validate_pause_time(pause_time)
     if not is_valid:
-        return False, error_message
+        errors.append(f"Pause Time Error: {error_message}")
     
     # Validate filename template
     filename_template = conf.get('csvName')
     is_valid, error_message = validate_filename_template(filename_template)
     if not is_valid:
-        return False, error_message
+        errors.append(f"Filename Template Error: {error_message}")
     
     is_valid, error_message = validate_ftp_config(conf, context)
     if not is_valid:
+        errors.append(f"FTP Configuration Error: {error_message}")
+
+    if errors:
+        error_message = "Configuration Validation Failed:\n"
+        for i, error in enumerate(errors, 1):
+            error_message += f"\n{i}. {error}"
         return False, error_message
     
     return True, None

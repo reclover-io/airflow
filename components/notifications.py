@@ -377,7 +377,9 @@ def send_email_notification(to: List[str], subject: str, html_content: str):
         )
         print(f"Email sent successfully to: {to}")
     except Exception as e:
+        error_msg = f"Failed to send email to {to}: {str(e)}"
         print(f"Failed to send email: {str(e)}")
+        raise AirflowException(error_msg)
 
 def send_notification(
     subject: str, 
