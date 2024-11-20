@@ -1,9 +1,7 @@
-
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.utils.trigger_rule import TriggerRule
 from datetime import datetime, timedelta
-from airflow.sensors.time_sensor import TimeSensor
 import pytz
 
 from components.notifications import (
@@ -16,10 +14,8 @@ from components.constants import *
 from components.uploadtoFTP import *
 from components.validators import validate_input_task
 
-API_URL = 'http://34.124.138.144:8000/mobileAppActivity'
-DAG_NAME = 'ELK_MobileApp_Activity_Logs'
-API_URL = "http://34.124.138.144:8000/mobileAppActivity"
-DAG_NAME = 'ELK_MobileApp_Activity_Logs'
+API_URL = "http://34.124.138.144:8000/friendMBNotiSpending"
+DAG_NAME = 'Friend_MB_Noti_Spending'
 
 # API Configuration
 API_HEADERS = {
@@ -28,17 +24,13 @@ API_HEADERS = {
 }
 
 # Output Configuration
-OUTPUT_DIR = f'/opt/airflow/data/batch/{DAG_NAME}'
-TEMP_DIR = f'/opt/airflow/data/batch/temp'
-CONTROL_DIR = f'/opt/airflow/data/batch/{DAG_NAME}'
-slack_webhook = ""
-
-DEFAULT_CSV_COLUMNS = [
-    'RequestID', 'Path', 'UserToken', 'RequestDateTime', '_id' , 'Status', 'CounterCode', 'Test'
-]
+OUTPUT_DIR = '/opt/airflow/output/batch_process'
+TEMP_DIR = '/opt/airflow/output/temp'
+CONTROL_DIR = '/opt/airflow/output/control'
+slack_webhook = "https://hooks.slack.com/services/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"
 
 default_emails = {
-    'email': ['elk_team@gmail.com'],
+    'email': ['phurinatkantapayao2@gmail.com'],
     'emailSuccess': [],
     'emailFail': [],
     'emailPause': [],
@@ -46,7 +38,10 @@ default_emails = {
     'emailStart': []
 }
 
-DEFAULT_CSV_COLUMNS = ['RequestID', 'Path', 'UserToken', 'RequestDateTime', '_id', 'Status', 'CounterCode']
+DEFAULT_CSV_COLUMNS = [
+    'Status', 'RequestDateTime', 'BusinessCode', 'UserToken', 'RequestID', 
+    '_id', 'MerchantName', 'Path', 'OriginalAmount', 'CurencyCode'
+]
 
 # Default arguments for the DAG
 default_args = {
@@ -58,14 +53,12 @@ default_args = {
     'retry_delay': timedelta(seconds=1)
 }
 
-
-
 # Create the DAG
 with DAG(
     DAG_NAME,
     default_args=default_args,
     description='Fetch API data with date range and save to CSV',
-    schedule_interval="* 0 * * *",
+    schedule_interval=None,
     start_date=datetime(2024, 1, 1),
     catchup=False,
     tags=['api', 'csv', 'backup']
@@ -76,7 +69,7 @@ with DAG(
         python_callable=validate_input_task,
         provide_context=True,
         retries=1,
-        op_args=[DEFAULT_CSV_COLUMNS, default_emails]
+        op_args=[DEFAULT_CSV_COLUMNS]
     )
     
     running_notification = PythonOperator(
@@ -92,7 +85,7 @@ with DAG(
         python_callable=process_data,
         provide_context=True,
         retries=3,
-        op_args=[API_URL,TEMP_DIR,OUTPUT_DIR,CONTROL_DIR,API_HEADERS,DEFAULT_CSV_COLUMNS, default_emails, slack_webhook],
+        op_args=[API_URL,TEMP_DIR,OUTPUT_DIR,CONTROL_DIR,API_HEADERS,DEFAULT_CSV_COLUMNS],
 
 
     )
@@ -102,7 +95,7 @@ with DAG(
         python_callable=send_success_notification,
         provide_context=True,
         op_args=[default_emails, slack_webhook],
-        trigger_rule=TriggerRule.NONE_FAILED_OR_SKIPPED
+        trigger_rule=TriggerRule.ALL_SUCCESS
     )
     
     failure_notification = PythonOperator(
@@ -117,8 +110,6 @@ with DAG(
         task_id='uploadtoFTP',
         python_callable=upload_csv_ctrl_to_ftp_server,
         provide_context=True,
-        op_args=[default_emails, slack_webhook],
-        trigger_rule=TriggerRule.ALL_SUCCESS
         
     )
     
@@ -126,4 +117,3 @@ with DAG(
     validate_input >> [running_notification, failure_notification]
     running_notification >> process_task >> [uploadtoFTP, failure_notification]
     uploadtoFTP >> [success_notification, failure_notification]
-    process_task >> success_notification

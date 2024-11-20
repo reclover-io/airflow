@@ -37,6 +37,7 @@ x-airflow-common:
     - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
     - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
     - ${AIRFLOW_PROJ_DIR:-.}/output:/opt/airflow/output
+    - ${AIRFLOW_PROJ_DIR:-.}/data:/opt/airflow/data
     - ${AIRFLOW_PROJ_DIR:-.}/components:/opt/airflow/components
     - ${AIRFLOW_PROJ_DIR:-.}/certs/airflow.pem:/opt/airflow/airflow.pem:ro
     - ${AIRFLOW_PROJ_DIR:-.}/certs/airflow.key:/opt/airflow/airflow.key:ro
