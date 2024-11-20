@@ -65,8 +65,8 @@ def upload_csv_ctrl_to_ftp_server(default_emails: Dict[str, List[str]],
         print("dag_id:", dag_id)
 
         # Prepare paths
-        csv_remote_path = f'/10.250.1.101/ELK/daily/source_data/landing/ELK_{dag_id}/'
-        ctrl_remote_path = f'/10.250.1.101/ELK/daily/source_data/landing/ELK_{dag_id}/'
+        csv_remote_path = f'/10.250.1.101/ELK/daily/source_data/landing/{dag_id}/'
+        ctrl_remote_path = f'/10.250.1.101/ELK/daily/source_data/landing/{dag_id}/'
         csv_local_file_path = f'/opt/airflow/output/batch_process/{output_filename_csv}'
         ctrl_local_file_path = f'/opt/airflow/output/control/{output_filename_ctrl}'
 

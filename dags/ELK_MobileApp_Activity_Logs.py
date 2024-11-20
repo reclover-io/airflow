@@ -16,7 +16,7 @@ from components.uploadtoFTP import *
 from components.validators import validate_input_task
 
 API_URL = 'http://34.124.138.144:8000/mobileAppActivity'
-DAG_NAME = 'MobileApp_Activity_Logs'
+DAG_NAME = 'ELK_MobileApp_Activity_Logs'
 
 # API Configuration
 API_HEADERS = {
