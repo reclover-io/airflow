@@ -2,9 +2,11 @@ from components.database import get_batch_state, get_failed_batch_runs
 from airflow.exceptions import AirflowException
 from components.constants import THAI_TZ
 import time
+from datetime import datetime
+from components.utils import get_thai_time
 
 def check_previous_failed_batch(**context):
-    """Check and resume all failed batches before running current batch"""
+    """Check and resume specified or all failed batches before running current batch"""
     from airflow.models import DagRun, TaskInstance, DagBag, XCom
     from airflow.utils.state import State
     from airflow.utils.session import create_session
@@ -13,11 +15,38 @@ def check_previous_failed_batch(**context):
     
     dag_run = context['dag_run']
     dag_id = dag_run.dag_id
+    conf = dag_run.conf or {}
     current_run_id = dag_run.run_id
+
+    # Wait for start_run if specified
+    start_run = conf.get('start_run')
+    if start_run:
+        start_time = datetime.strptime(start_run, '%Y-%m-%d %H:%M:%S.%f')
+        start_time = THAI_TZ.localize(start_time)
+        current_time = get_thai_time()
+        
+        if current_time < start_time:
+            wait_time = (start_time - current_time).total_seconds()
+            print(f"Waiting {wait_time} seconds until start time: {start_run}")
+            time.sleep(wait_time)
     
-    # Get all failed batches ordered by start date
+    # Get failed batches based on config or all failed runs
     print("\nChecking for failed batches...")
-    failed_batches = get_failed_batch_runs(dag_id)
+    run_ids_to_process = conf.get('run_id', [])
+    
+    if run_ids_to_process:
+        # If specific run_ids provided, get their batch information
+        print(f"Processing specified run_ids: {run_ids_to_process}")
+        failed_batches = [
+            batch for batch in get_failed_batch_runs(dag_id)
+            if batch['run_id'] in run_ids_to_process
+        ]
+        # Sort by DAG start date to maintain chronological order
+        failed_batches.sort(key=lambda x: x['dag_start_date'])
+    else:
+        # Get all failed batches ordered by start date
+        print("No specific run_ids provided, processing all failed batches")
+        failed_batches = get_failed_batch_runs(dag_id)
     
     if failed_batches:
         print(f"\nFound {len(failed_batches)} failed batches to process")
@@ -25,8 +54,10 @@ def check_previous_failed_batch(**context):
         for i, batch in enumerate(failed_batches, 1):
             run_id = batch['run_id']
             batch_start_date = batch['start_date']
+            dag_start_date = batch['dag_start_date']
             print(f"\nProcessing batch {i} of {len(failed_batches)}")
             print(f"Run ID: {run_id}")
+            print(f"DAG Start Date: {dag_start_date}")
             print(f"Batch Start Date: {batch_start_date}")
             
             try:

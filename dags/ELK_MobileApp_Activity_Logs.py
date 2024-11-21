@@ -37,7 +37,7 @@ DEFAULT_CSV_COLUMNS = [
 ]
 
 default_emails = {
-    'email': [],
+    'email': [''],
     'emailSuccess': [],
     'emailFail': [],
     'emailPause': [],
@@ -73,7 +73,8 @@ with DAG(
     check_previous_fails = PythonOperator(
         task_id='check_previous_failed_batch',
         python_callable=check_previous_failed_batch,
-        provide_context=True
+        provide_context=True,
+        trigger_rule=TriggerRule.ALL_SUCCESS
     )
     
     validate_input = PythonOperator(
@@ -128,7 +129,8 @@ with DAG(
     )
     
     # Define Dependencies
-    check_previous_fails >> validate_input >> [running_notification, failure_notification]
+    # check_previous_fails >> validate_input >> [running_notification, failure_notification]
+    validate_input >> check_previous_fails >> [running_notification, failure_notification]
     running_notification >> process_task >> [uploadtoFTP, failure_notification]
     uploadtoFTP >> [success_notification, failure_notification]
     process_task >> success_notification
