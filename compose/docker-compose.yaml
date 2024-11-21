@@ -286,28 +286,21 @@ services:
         condition: service_completed_successfully
     networks:
       - airflow-net
-  
-  ftp-server:
-    image: fauria/vsftpd
-    container_name: airflow-ftp-server
+
+  ftps:
+    image: bfren/ftps
     ports:
       - "21:21"
-      - "20:20"
-      - "21100-21110:21100-21110"
+      - "990:990"
+      - "18700-18710:18700-18710"
     environment:
-      FTP_USER: "airflow"
-      FTP_PASS: "airflow"
-      PASV_ADDRESS: "34.124.138.144"
-      PASV_MIN_PORT: 21100
-      PASV_MAX_PORT: 21110
-      FTP_MAX_CLIENTS: 10
-      FTP_MAX_CONNECTIONS: 5
-
+      BF_FTPS_EXTERNAL_IP: "34.124.138.144"
+      BF_FTPS_VSFTPD_USER: "airflow"
+      BF_FTPS_VSFTPD_PASS: "airflow"
+      BF_FTPS_DISABLE_TEMPLATE: "true"  # Ensures container does not overwrite vsftpd.conf
     volumes:
-      - ./ftp-data:/home/vsftpd
-    restart: always
-    networks:
-      - airflow-net
+      - ../data/ftps/files:/files
+      - ../certs/vsftpd.pem:/ssl/server.pem
 
 volumes:
   postgres-db-volume:
