@@ -15,9 +15,8 @@ from components.process import process_data, check_pause_status
 from components.constants import *
 from components.uploadtoFTP import *
 from components.validators import validate_input_task
+from components.check_previous_failed_batch import check_previous_failed_batch
 
-API_URL = 'http://34.124.138.144:8000/mobileAppActivity'
-DAG_NAME = 'ELK_MobileApp_Activity_Logs'
 API_URL = "http://34.124.138.144:8000/mobileAppActivity"
 DAG_NAME = 'ELK_MobileApp_Activity_Logs'
 
@@ -38,7 +37,7 @@ DEFAULT_CSV_COLUMNS = [
 ]
 
 default_emails = {
-    'email': ['elk_team@gmail.com'],
+    'email': [],
     'emailSuccess': [],
     'emailFail': [],
     'emailPause': [],
@@ -70,6 +69,12 @@ with DAG(
     catchup=False,
     tags=['api', 'csv', 'backup']
 ) as dag:
+    
+    check_previous_fails = PythonOperator(
+        task_id='check_previous_failed_batch',
+        python_callable=check_previous_failed_batch,
+        provide_context=True
+    )
     
     validate_input = PythonOperator(
         task_id='validate_input',
@@ -123,7 +128,7 @@ with DAG(
     )
     
     # Define Dependencies
-    validate_input >> [running_notification, failure_notification]
+    check_previous_fails >> validate_input >> [running_notification, failure_notification]
     running_notification >> process_task >> [uploadtoFTP, failure_notification]
     uploadtoFTP >> [success_notification, failure_notification]
     process_task >> success_notification

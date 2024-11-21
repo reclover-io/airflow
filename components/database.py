@@ -149,3 +149,69 @@ def get_initial_start_time(batch_id: str, run_id: str) -> Optional[datetime]:
                 # ถ้ามี timezone อยู่แล้ว ให้แปลงเป็น Thai timezone
                 return result[0].astimezone(THAI_TZ)
         return None
+    
+def get_failed_batch_runs(dag_id: str, before_date: datetime) -> List[Dict]:
+    """Get failed batch runs before specified date"""
+    with get_db_connection() as conn:
+        # Add debug logging
+        print(f"Checking for failed batches:")
+        print(f"DAG ID: {dag_id}")
+        print(f"Before Date: {before_date}")
+        
+        query = text("""
+            SELECT 
+                run_id,
+                start_date,
+                end_date,
+                status,
+                error_message,
+                created_at,
+                updated_at
+            FROM batch_states bs
+            WHERE bs.batch_id = :dag_id
+            AND bs.status = 'FAILED'
+            AND NOT EXISTS (
+                -- Check if there's no successful run with same date range and later timestamp
+                SELECT 1 
+                FROM batch_states b2
+                WHERE b2.batch_id = bs.batch_id
+                AND b2.start_date = bs.start_date
+                AND b2.end_date = bs.end_date
+                AND b2.status = 'COMPLETED'
+                AND b2.created_at > bs.created_at
+            )
+            -- Get the latest status for each date range
+            AND bs.updated_at = (
+                SELECT MAX(updated_at)
+                FROM batch_states bs2
+                WHERE bs2.batch_id = bs.batch_id
+                AND bs2.start_date = bs.start_date
+                AND bs2.end_date = bs.end_date
+            )
+            ORDER BY bs.created_at DESC
+        """)
+        
+        try:
+            result = conn.execute(query, {
+                'dag_id': str(dag_id),
+            }).fetchall()
+            
+            # Add debug logging
+            if result:
+                print(f"\nFound {len(result)} failed batches:")
+                for row in result:
+                    print(f"\nRun ID: {row['run_id']}")
+                    print(f"Start Date: {row['start_date']}")
+                    print(f"End Date: {row['end_date']}")
+                    print(f"Status: {row['status']}")
+                    print(f"Created At: {row['created_at']}")
+                    print(f"Updated At: {row['updated_at']}")
+                    print(f"Error: {row['error_message']}")
+            else:
+                print("No failed batches found in database")
+            
+            return [dict(row) for row in result] if result else []
+            
+        except Exception as e:
+            print(f"Error executing query: {str(e)}")
+            raise
