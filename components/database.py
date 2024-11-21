@@ -150,50 +150,49 @@ def get_initial_start_time(batch_id: str, run_id: str) -> Optional[datetime]:
                 return result[0].astimezone(THAI_TZ)
         return None
     
-def get_failed_batch_runs(dag_id: str, before_date: datetime) -> List[Dict]:
-    """Get failed batch runs before specified date"""
+def get_failed_batch_runs(dag_id: str) -> List[Dict]:
+    """Get all failed batch runs ordered by DAG start date (oldest first)"""
     with get_db_connection() as conn:
-        # Add debug logging
-        print(f"Checking for failed batches:")
+        print(f"Checking for failed batch runs:")
         print(f"DAG ID: {dag_id}")
-        print(f"Before Date: {before_date}")
         
         query = text("""
+            WITH LatestBatchStates AS (
+                -- Get the latest batch state for each run_id
+                SELECT DISTINCT ON (run_id)
+                    batch_id,
+                    run_id,
+                    start_date as batch_start_date,
+                    end_date as batch_end_date,
+                    status,
+                    error_message,
+                    created_at,
+                    updated_at
+                FROM batch_states
+                WHERE batch_id = :dag_id
+                ORDER BY run_id, updated_at DESC
+            )
             SELECT 
-                run_id,
-                start_date,
-                end_date,
-                status,
-                error_message,
-                created_at,
-                updated_at
-            FROM batch_states bs
-            WHERE bs.batch_id = :dag_id
-            AND bs.status = 'FAILED'
-            AND NOT EXISTS (
-                -- Check if there's no successful run with same date range and later timestamp
-                SELECT 1 
-                FROM batch_states b2
-                WHERE b2.batch_id = bs.batch_id
-                AND b2.start_date = bs.start_date
-                AND b2.end_date = bs.end_date
-                AND b2.status = 'COMPLETED'
-                AND b2.created_at > bs.created_at
-            )
-            -- Get the latest status for each date range
-            AND bs.updated_at = (
-                SELECT MAX(updated_at)
-                FROM batch_states bs2
-                WHERE bs2.batch_id = bs.batch_id
-                AND bs2.start_date = bs.start_date
-                AND bs2.end_date = bs.end_date
-            )
-            ORDER BY bs.created_at DESC
+                dr.run_id,
+                dr.state as dag_state,
+                dr.start_date as dag_start_date,
+                dr.end_date as dag_end_date,
+                bs.batch_start_date,
+                bs.batch_end_date,
+                bs.status as batch_status,
+                bs.error_message,
+                bs.created_at,
+                bs.updated_at
+            FROM dag_run dr
+            LEFT JOIN LatestBatchStates bs ON dr.run_id = bs.run_id AND dr.dag_id = bs.batch_id
+            WHERE dr.dag_id = :dag_id
+            AND dr.state = 'failed'
+            ORDER BY dr.start_date ASC  -- Order by DAG run start date, oldest first
         """)
         
         try:
             result = conn.execute(query, {
-                'dag_id': str(dag_id),
+                'dag_id': str(dag_id)
             }).fetchall()
             
             # Add debug logging
@@ -201,16 +200,34 @@ def get_failed_batch_runs(dag_id: str, before_date: datetime) -> List[Dict]:
                 print(f"\nFound {len(result)} failed batches:")
                 for row in result:
                     print(f"\nRun ID: {row['run_id']}")
-                    print(f"Start Date: {row['start_date']}")
-                    print(f"End Date: {row['end_date']}")
-                    print(f"Status: {row['status']}")
+                    print(f"DAG State: {row['dag_state']}")
+                    print(f"DAG Start Date: {row['dag_start_date']}")
+                    print(f"Batch Status: {row['batch_status']}")
+                    print(f"Start Date: {row['batch_start_date']}")
+                    print(f"End Date: {row['batch_end_date']}")
                     print(f"Created At: {row['created_at']}")
                     print(f"Updated At: {row['updated_at']}")
                     print(f"Error: {row['error_message']}")
             else:
                 print("No failed batches found in database")
             
-            return [dict(row) for row in result] if result else []
+            # Convert to list of dictionaries with standardized keys
+            failed_batches = []
+            for row in result:
+                failed_batches.append({
+                    'run_id': row['run_id'],
+                    'start_date': row['batch_start_date'],
+                    'end_date': row['batch_end_date'],
+                    'status': row['batch_status'],
+                    'error_message': row['error_message'],
+                    'created_at': row['created_at'],
+                    'updated_at': row['updated_at'],
+                    'dag_state': row['dag_state'],
+                    'dag_start_date': row['dag_start_date'],
+                    'dag_end_date': row['dag_end_date']
+                })
+            
+            return failed_batches
             
         except Exception as e:
             print(f"Error executing query: {str(e)}")
