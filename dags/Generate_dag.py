@@ -17,13 +17,13 @@ def create_dag_file(**kwargs):
     emailPause = config.get('EMAIL_PAUSE', [])
     emailResume = config.get('EMAIL_RESUME', [])
     emailStart = config.get('EMAIL_START', [])
-    start_date = config.get('START_DATE','2024, 1, 1')
 
     # Template ของ DAG ใหม่ที่เหมือนกับ Friend_MB_Noti_Spending.py
     dag_content = f"""
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.utils.trigger_rule import TriggerRule
+import pendulum
 from datetime import datetime, timedelta
 from components.check_previous_failed_batch import check_previous_failed_batch
 
@@ -36,6 +36,10 @@ from components.process import process_data
 from components.constants import *
 from components.uploadtoFTP import *
 from components.validators import validate_input_task
+
+local_tz = pendulum.timezone("Asia/Bangkok")
+
+start_date = (datetime.now(local_tz) - timedelta(days=1))
 
 API_URL = "{api_url}"
 DAG_NAME = '{dag_name}'
@@ -79,7 +83,7 @@ with DAG(
     default_args=default_args,
     description='Fetch API data with date range and save to CSV',
     schedule_interval="{schedule_interval}",
-    start_date=datetime({start_date}),
+    start_date=start_date,
     catchup=False,
     tags=['api', 'csv', 'backup']
 ) as dag:
