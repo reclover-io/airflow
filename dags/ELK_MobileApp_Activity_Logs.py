@@ -37,7 +37,7 @@ DEFAULT_CSV_COLUMNS = [
 ]
 
 default_emails = {
-    'email': [''],
+    'email': ['phurinatkantapayao2@gmail.com'],
     'emailSuccess': [],
     'emailFail': [],
     'emailPause': [],
@@ -64,9 +64,10 @@ with DAG(
     DAG_NAME,
     default_args=default_args,
     description='Fetch API data with date range and save to CSV',
-    schedule_interval="* 0 * * *",
+    #schedule_interval="",
     start_date=datetime(2024, 1, 1),
     catchup=False,
+    max_active_runs=3,
     tags=['api', 'csv', 'backup']
 ) as dag:
     
