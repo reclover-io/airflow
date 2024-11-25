@@ -127,6 +127,15 @@ with DAG(
         op_args=[default_emails, slack_webhook],
         trigger_rule=TriggerRule.ONE_FAILED
     )
+
+    uploadtoFTP = PythonOperator(
+        task_id='uploadtoFTP',
+        python_callable=upload_csv_ctrl_to_ftp_server,
+        provide_context=True,
+        op_args=[default_emails, slack_webhook],
+        trigger_rule=TriggerRule.ALL_SUCCESS
+        
+    )
     
     # Define Dependencies
     validate_input >> check_previous_fails >> [running_notification, failure_notification]
