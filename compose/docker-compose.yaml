@@ -105,6 +105,7 @@ services:
     environment:
       <<: *airflow-common-env
       PYTHONPATH: /opt/airflow
+      AIRFLOW__WEBSERVER__BASE_URL: https://34.124.138.144:8081
     networks:
       - airflow-net
 
@@ -301,6 +302,7 @@ services:
     volumes:
       - ../data/ftps/files:/files
       - ../certs/vsftpd.pem:/ssl/server.pem
+    restart: always  
 
 volumes:
   postgres-db-volume:
