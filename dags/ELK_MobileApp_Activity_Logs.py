@@ -64,8 +64,9 @@ with DAG(
     DAG_NAME,
     default_args=default_args,
     description='Fetch API data with date range and save to CSV',
-    schedule_interval="* 0 * * *",
-    start_date=datetime(2024, 1, 1),
+    #schedule_interval="57 11 * * *",
+    schedule_interval=None,
+    start_date=datetime(2024, 11, 23),
     catchup=False,
     tags=['api', 'csv', 'backup']
 ) as dag:
