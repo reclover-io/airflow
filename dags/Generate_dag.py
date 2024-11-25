@@ -19,6 +19,7 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.utils.trigger_rule import TriggerRule
 from datetime import datetime, timedelta
+from components.check_previous_failed_batch import check_previous_failed_batch
 import pytz
 
 from components.notifications import (
@@ -44,7 +45,7 @@ API_HEADERS = {{
 OUTPUT_DIR = f'/opt/airflow/data/batch/{{DAG_NAME}}'
 TEMP_DIR = f'/opt/airflow/data/batch/temp'
 CONTROL_DIR = f'/opt/airflow/data/batch/{{DAG_NAME}}'
-slack_webhook = "https://hooks.slack.com/services/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"
+slack_webhook = ""
 
 default_emails = {{
     'email': ['elk_team@gmail.com'],
@@ -90,7 +91,7 @@ with DAG(
         python_callable=validate_input_task,
         provide_context=True,
         retries=1,
-        op_args=[DEFAULT_CSV_COLUMNS]
+        op_args=[DEFAULT_CSV_COLUMNS,default_emails]
     )
     
     running_notification = PythonOperator(
