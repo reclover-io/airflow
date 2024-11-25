@@ -2,6 +2,10 @@ from typing import Dict, List, Tuple, Optional
 from datetime import datetime, timedelta
 import re
 from airflow.exceptions import AirflowException
+from components.utils import get_thai_time
+from airflow.utils.session import create_session
+from airflow.models import DagRun
+from components.constants import THAI_TZ
 
 def validate_datetime_format(date_str: str, field_name: str) -> Tuple[bool, Optional[str]]:
     """
@@ -272,7 +276,9 @@ def get_default_config(execution_date: datetime) -> Dict:
     For daily batch, will get data from previous day
     """
     # Get previous day
-    prev_day = execution_date - timedelta(days=1)
+    current_time = get_thai_time()
+    #prev_day = execution_date - timedelta(days=1)
+    prev_day = current_time - timedelta(days=1)
     
     # Format start date and end date
     start_date = prev_day.replace(
@@ -293,6 +299,68 @@ def get_default_config(execution_date: datetime) -> Dict:
         'startDate': start_date,
         'endDate': end_date
     }
+
+def validate_start_run(start_run: Optional[str]) -> Tuple[bool, Optional[str]]:
+    """Validate start_run time"""
+    if not start_run:
+        return True, None
+
+    try:
+        # Validate format
+        start_time = datetime.strptime(start_run, '%Y-%m-%d %H:%M:%S.%f')
+        # Convert to Thai timezone
+        start_time = THAI_TZ.localize(start_time)
+        
+        # Get current time in Thai timezone
+        current_time = get_thai_time()
+
+        print(f"Validating start_run:")
+        print(f"Start time: {start_time}")
+        print(f"Current time: {current_time}")
+
+        # Check if start_time is in the future
+        if start_time <= current_time:
+            return False, (
+                f"start_run must be in the future.\n"
+                f"Start time: {start_time.strftime('%Y-%m-%d %H:%M:%S.%f')}\n"
+                f"Current time: {current_time.strftime('%Y-%m-%d %H:%M:%S.%f')}"
+            )
+
+        return True, None
+        
+    except ValueError as e:
+        return False, (
+            f"Invalid start_run format: {str(e)}.\n"
+            f"Expected format: YYYY-MM-DD HH:mm:ss.SSS"
+        )
+    except Exception as e:
+        return False, f"Error validating start_run: {str(e)}"
+    
+def validate_run_ids(run_ids: List[str], dag_id: str) -> Tuple[bool, Optional[str]]:
+    """Validate run_ids exist and are in failed state"""
+    if not run_ids:
+        return True, None
+
+    if not isinstance(run_ids, list):
+        return False, "run_ids must be a list"
+
+    with create_session() as session:
+        errors = []
+        for run_id in run_ids:
+            dag_run = session.query(DagRun).filter(
+                DagRun.dag_id == dag_id,
+                DagRun.run_id == run_id
+            ).first()
+
+            if not dag_run:
+                errors.append(f"Run ID not found: {run_id}")
+            elif dag_run.state != 'failed':
+                errors.append(f"Run ID {run_id} is in {dag_run.state} state. Only failed runs can be resumed.")
+
+        if errors:
+            return False, "\n".join(errors)
+
+    return True, None
 
 # Main validation function
 def validate_config(conf: Dict, DEFAULT_CSV_COLUMNS: List[str], context: Dict) -> Tuple[bool, Optional[str]]:
@@ -334,6 +402,18 @@ def validate_config(conf: Dict, DEFAULT_CSV_COLUMNS: List[str], context: Dict) -
     is_valid, error_message = validate_ftp_config(conf, context)
     if not is_valid:
         errors.append(f"FTP Configuration Error: {error_message}")
+
+    run_ids = conf.get('run_id')
+    if run_ids:
+        is_valid, error_message = validate_run_ids(run_ids, context['dag'].dag_id)
+        if not is_valid:
+            errors.append(f"Invalid run_ids: {error_message}")
+
+    start_run = conf.get('start_run')
+    if start_run:
+        is_valid, error_message = validate_start_run(start_run)
+        if not is_valid:
+            errors.append(f"Invalid start_run: {error_message}")
 
     if errors:
         error_message = "Configuration Validation Failed:\n"

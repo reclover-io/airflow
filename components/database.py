@@ -149,3 +149,51 @@ def get_initial_start_time(batch_id: str, run_id: str) -> Optional[datetime]:
                 # ถ้ามี timezone อยู่แล้ว ให้แปลงเป็น Thai timezone
                 return result[0].astimezone(THAI_TZ)
         return None
+    
+def get_failed_batch_runs(dag_id: str) -> List[Dict]:
+    """Get all failed batch runs ordered by DAG start date (oldest first)"""
+    with get_db_connection() as conn:
+        print(f"Checking for failed batch runs:")
+        print(f"DAG ID: {dag_id}")
+        
+        query = text("""
+            SELECT *
+            FROM dag_run
+            WHERE state = 'failed'
+            ORDER BY execution_date ASC;
+        """)
+        
+        try:
+            result = conn.execute(query, {
+                'dag_id': str(dag_id)
+            }).fetchall()
+            
+            # Add debug logging
+            if result:
+                print(f"\nFound {len(result)} failed batches:")
+                for row in result:
+                    print(f"\nRun ID: {row['run_id']}")
+                    print(f"State: {row['state']}")
+                    print(f"Execution Date: {row['execution_date']}")
+                    print(f"Start Date: {row['start_date']}")
+                    print(f"End Date: {row['end_date']}")
+            else:
+                print("No failed batches found in database")
+            
+            # Convert to list of dictionaries with standardized keys
+            failed_batches = []
+            for row in result:
+                failed_batches.append({
+                    'run_id': row['run_id'],
+                    'dag_id': row['dag_id'],
+                    'execution_date': row['execution_date'],
+                    'start_date': row['start_date'],
+                    'end_date': row['end_date'],
+                    'state': row['state']
+                })
+            
+            return failed_batches
+            
+        except Exception as e:
+            print(f"Error executing query: {str(e)}")
+            raise
