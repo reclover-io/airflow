@@ -415,6 +415,10 @@ def validate_config(conf: Dict, DEFAULT_CSV_COLUMNS: List[str], context: Dict) -
         if not is_valid:
             errors.append(f"Invalid start_run: {error_message}")
 
+    is_valid, error_message = validate_check_fail(conf)
+    if not is_valid:
+        errors.append(f"Invalid check_fail: {error_message}")
+
     if errors:
         error_message = "Configuration Validation Failed:\n"
         for i, error in enumerate(errors, 1):
@@ -488,3 +492,10 @@ def validate_ftp_config(conf: Dict, context: Dict) -> Tuple[bool, Optional[str]]
 
     except Exception as e:
         return False, f"Failed to validate FTP configuration: {str(e)}"
+    
+def validate_check_fail(conf: Dict) -> Tuple[bool, Optional[str]]:
+    """Validate check_fail configuration"""
+    check_fail = conf.get('check_fail')
+    if check_fail is not None and not isinstance(check_fail, bool):
+        return False, "check_fail must be a boolean value"
+    return True, None
