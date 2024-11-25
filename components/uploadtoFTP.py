@@ -73,21 +73,21 @@ def upload_csv_ctrl_to_ftp_server(default_emails: Dict[str, List[str]],
             raise AirflowSkipException("FTPS upload disabled in configuration")
 
         # Get file names
-        output_filename_csv = ti.xcom_pull(dag_id=dag_id, key='output_filename')
+        output_filename = ti.xcom_pull(dag_id=dag_id, key='output_filename')
         output_filename_ctrl = ti.xcom_pull(dag_id=dag_id, key='control_filename')
 
-        if not output_filename_csv or not output_filename_ctrl:
+        if not output_filename or not output_filename_ctrl:
             raise AirflowException("Missing file names from previous tasks")
 
-        print("output_filename:", output_filename_csv)
-        print("control_filename:", output_filename_ctrl)
-        print("dag_id:", dag_id)
+        # print("output_filename:", output_filename)
+        # print("control_filename:", output_filename_ctrl)
+        # print("dag_id:", dag_id)
 
         # Prepare paths
         csv_remote_path = f'/10.250.1.101/ELK/daily/source_data/landing/{dag_id}/'
         ctrl_remote_path = f'/10.250.1.101/ELK/daily/source_data/landing/{dag_id}/'
-        csv_local_file_path = f'/opt/airflow/data/batch/{dag_id}/{output_filename_csv}'
-        ctrl_local_file_path = f'/opt/airflow/data/batch/{dag_id}/{output_filename_ctrl}'
+        csv_local_file_path = f'/opt/airflow/data/batch/{dag_id}/{output_filename}.csv'
+        ctrl_local_file_path = f'/opt/airflow/data/batch/{dag_id}/{output_filename}.ctrl'
 
         # Verify local files exist
         if not os.path.exists(csv_local_file_path):
@@ -97,7 +97,7 @@ def upload_csv_ctrl_to_ftp_server(default_emails: Dict[str, List[str]],
 
         try:
             # Connect to FTPS
-            ftps_server = '34.124.138.144'
+            ftps_server = '172.29.80.1'
             username = 'airflow'
             password = 'airflow'
             ftps = connect_to_ftps(ftps_server, username, password)
