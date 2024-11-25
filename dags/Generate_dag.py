@@ -85,13 +85,13 @@ with DAG(
         provide_context=True,
         trigger_rule=TriggerRule.ALL_SUCCESS
     )
-
+    
     validate_input = PythonOperator(
         task_id='validate_input',
         python_callable=validate_input_task,
         provide_context=True,
         retries=1,
-        op_args=[DEFAULT_CSV_COLUMNS,default_emails]
+        op_args=[DEFAULT_CSV_COLUMNS, default_emails]
     )
     
     running_notification = PythonOperator(
@@ -107,7 +107,9 @@ with DAG(
         python_callable=process_data,
         provide_context=True,
         retries=3,
-        op_args=[API_URL, TEMP_DIR, OUTPUT_DIR, CONTROL_DIR, API_HEADERS, DEFAULT_CSV_COLUMNS]
+        op_args=[API_URL,TEMP_DIR,OUTPUT_DIR,CONTROL_DIR,API_HEADERS,DEFAULT_CSV_COLUMNS, default_emails, slack_webhook],
+
+
     )
     
     success_notification = PythonOperator(
@@ -115,7 +117,7 @@ with DAG(
         python_callable=send_success_notification,
         provide_context=True,
         op_args=[default_emails, slack_webhook],
-        trigger_rule=TriggerRule.ALL_SUCCESS
+        trigger_rule=TriggerRule.NONE_FAILED_OR_SKIPPED
     )
     
     failure_notification = PythonOperator(
@@ -124,12 +126,6 @@ with DAG(
         provide_context=True,
         op_args=[default_emails, slack_webhook],
         trigger_rule=TriggerRule.ONE_FAILED
-    )
-
-    uploadtoFTP = PythonOperator(
-        task_id='uploadtoFTP',
-        python_callable=upload_csv_ctrl_to_ftp_server,
-        provide_context=True
     )
     
     # Define Dependencies
