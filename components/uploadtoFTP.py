@@ -97,7 +97,7 @@ def upload_csv_ctrl_to_ftp_server(default_emails: Dict[str, List[str]],
 
         try:
             # Connect to FTPS
-            ftps_server = '172.29.80.1'
+            ftps_server = '34.124.138.144'
             username = 'airflow'
             password = 'airflow'
             ftps = connect_to_ftps(ftps_server, username, password)
