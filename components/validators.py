@@ -276,7 +276,9 @@ def get_default_config(execution_date: datetime) -> Dict:
     For daily batch, will get data from previous day
     """
     # Get previous day
-    prev_day = execution_date - timedelta(days=1)
+    current_time = get_thai_time()
+    #prev_day = execution_date - timedelta(days=1)
+    prev_day = current_time - timedelta(days=1)
     
     # Format start date and end date
     start_date = prev_day.replace(

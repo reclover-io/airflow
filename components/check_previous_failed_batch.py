@@ -53,12 +53,10 @@ def check_previous_failed_batch(**context):
         print("Processing in chronological order (oldest first):")
         for i, batch in enumerate(failed_batches, 1):
             run_id = batch['run_id']
-            batch_start_date = batch['start_date']
-            dag_start_date = batch['dag_start_date']
+            execution_date = batch['execution_date']
             print(f"\nProcessing batch {i} of {len(failed_batches)}")
             print(f"Run ID: {run_id}")
-            print(f"DAG Start Date: {dag_start_date}")
-            print(f"Batch Start Date: {batch_start_date}")
+            print(f"Execution Date: {execution_date}")
             
             try:
                 with create_session() as session:
