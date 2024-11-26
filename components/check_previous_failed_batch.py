@@ -1,5 +1,5 @@
 from components.database import get_batch_state, get_failed_batch_runs
-from airflow.exceptions import AirflowException
+from airflow.exceptions import AirflowException, AirflowSkipException
 from components.constants import THAI_TZ
 import time
 from datetime import datetime
@@ -17,6 +17,11 @@ def check_previous_failed_batch(**context):
     dag_id = dag_run.dag_id
     conf = dag_run.conf or {}
     current_run_id = dag_run.run_id
+
+    check_fail = conf.get('check_fail', True)  # Default to True if not specified
+    if not check_fail:
+        print("Skipping check_previous_fails as configured (check_fail: false)")
+        raise AirflowSkipException("Skipping failed batch check as configured")
 
     # Wait for start_run if specified
     start_run = conf.get('start_run')

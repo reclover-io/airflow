@@ -37,7 +37,7 @@ DEFAULT_CSV_COLUMNS = [
 ]
 
 default_emails = {
-    'email': [''],
+    'email': ['asdfasdfasdssfd@adsfasdf.com'],
     'emailSuccess': [],
     'emailFail': [],
     'emailPause': [],
@@ -64,9 +64,9 @@ with DAG(
     DAG_NAME,
     default_args=default_args,
     description='Fetch API data with date range and save to CSV',
-    #schedule_interval="57 11 * * *",
+    #schedule_interval="0 0 * * *",
     schedule_interval=None,
-    start_date=datetime(2024, 11, 23),
+    start_date=datetime(2024, 11, 25),
     catchup=False,
     tags=['api', 'csv', 'backup']
 ) as dag:
@@ -91,7 +91,7 @@ with DAG(
         python_callable=send_running_notification,
         provide_context=True,
         op_args=[default_emails, slack_webhook],
-        trigger_rule=TriggerRule.ALL_SUCCESS
+        trigger_rule=TriggerRule.NONE_FAILED_OR_SKIPPED
     )
     
     process_task = PythonOperator(
@@ -100,7 +100,7 @@ with DAG(
         provide_context=True,
         retries=3,
         op_args=[API_URL,TEMP_DIR,OUTPUT_DIR,CONTROL_DIR,API_HEADERS,DEFAULT_CSV_COLUMNS, default_emails, slack_webhook],
-
+        trigger_rule=TriggerRule.ALL_SUCCESS
 
     )
     
@@ -131,6 +131,7 @@ with DAG(
     
     # Define Dependencies
     # check_previous_fails >> validate_input >> [running_notification, failure_notification]
+    validate_input >> [running_notification, failure_notification]
     validate_input >> check_previous_fails >> [running_notification, failure_notification]
     running_notification >> process_task >> [uploadtoFTP, failure_notification]
     uploadtoFTP >> [success_notification, failure_notification]
