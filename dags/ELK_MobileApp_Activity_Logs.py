@@ -71,12 +71,12 @@ with DAG(
     tags=['api', 'csv', 'backup']
 ) as dag:
     
-    check_previous_fails = PythonOperator(
-        task_id='check_previous_failed_batch',
-        python_callable=check_previous_failed_batch,
-        provide_context=True,
-        trigger_rule=TriggerRule.ALL_SUCCESS
-    )
+    # check_previous_fails = PythonOperator(
+    #     task_id='check_previous_failed_batch',
+    #     python_callable=check_previous_failed_batch,
+    #     provide_context=True,
+    #     trigger_rule=TriggerRule.ALL_SUCCESS
+    # )
     
     validate_input = PythonOperator(
         task_id='validate_input',
@@ -86,13 +86,13 @@ with DAG(
         op_args=[DEFAULT_CSV_COLUMNS, default_emails]
     )
     
-    running_notification = PythonOperator(
-        task_id='send_running_notification',
-        python_callable=send_running_notification,
-        provide_context=True,
-        op_args=[default_emails, slack_webhook],
-        trigger_rule=TriggerRule.NONE_FAILED_OR_SKIPPED
-    )
+    # running_notification = PythonOperator(
+    #     task_id='send_running_notification',
+    #     python_callable=send_running_notification,
+    #     provide_context=True,
+    #     op_args=[default_emails, slack_webhook],
+    #     trigger_rule=TriggerRule.NONE_FAILED_OR_SKIPPED
+    # )
     
     process_task = PythonOperator(
         task_id='process_data',
@@ -104,21 +104,21 @@ with DAG(
 
     )
     
-    success_notification = PythonOperator(
-        task_id='send_success_notification',
-        python_callable=send_success_notification,
-        provide_context=True,
-        op_args=[default_emails, slack_webhook],
-        trigger_rule=TriggerRule.NONE_FAILED_OR_SKIPPED
-    )
+    # success_notification = PythonOperator(
+    #     task_id='send_success_notification',
+    #     python_callable=send_success_notification,
+    #     provide_context=True,
+    #     op_args=[default_emails, slack_webhook],
+    #     trigger_rule=TriggerRule.NONE_FAILED_OR_SKIPPED
+    # )
     
-    failure_notification = PythonOperator(
-        task_id='send_failure_notification',
-        python_callable=send_failure_notification,
-        provide_context=True,
-        op_args=[default_emails, slack_webhook],
-        trigger_rule=TriggerRule.ONE_FAILED
-    )
+    # failure_notification = PythonOperator(
+    #     task_id='send_failure_notification',
+    #     python_callable=send_failure_notification,
+    #     provide_context=True,
+    #     op_args=[default_emails, slack_webhook],
+    #     trigger_rule=TriggerRule.ONE_FAILED
+    # )
 
     uploadtoFTP = PythonOperator(
         task_id='uploadtoFTP',
@@ -130,9 +130,10 @@ with DAG(
     )
     
     # Define Dependencies
-    # check_previous_fails >> validate_input >> [running_notification, failure_notification]
-    validate_input >> [running_notification, failure_notification]
-    validate_input >> check_previous_fails >> [running_notification, failure_notification]
-    running_notification >> process_task >> [uploadtoFTP, failure_notification]
-    uploadtoFTP >> [success_notification, failure_notification]
-    process_task >> success_notification
+    # validate_input >> [running_notification, failure_notification]
+    # validate_input >> check_previous_fails >> [running_notification, failure_notification]
+    # running_notification >> process_task >> [uploadtoFTP, failure_notification]
+    # uploadtoFTP >> [success_notification, failure_notification]
+    # process_task >> success_notification
+
+    validate_input >> process_task >> uploadtoFTP
