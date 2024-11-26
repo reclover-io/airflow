@@ -1,12 +1,55 @@
-from contextlib import contextmanager
-from sqlalchemy import create_engine, text
+from sqlalchemy import (
+    create_engine, MetaData, Table, Column, String, Integer, TIMESTAMP, Index, inspect, text
+)
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.exc import SQLAlchemyError
 from components.constants import DB_CONNECTION
+from contextlib import contextmanager
+
+
+# สร้าง database engine
+engine = create_engine(DB_CONNECTION)
+metadata = MetaData()
+
+# Schema ของตาราง batch_states
+BATCH_STATES_TABLE = Table(
+    'batch_states', metadata,
+    Column('batch_id', String(255), primary_key=True),
+    Column('run_id', String(255), primary_key=True),
+    Column('start_date', TIMESTAMP(timezone=True), nullable=False),
+    Column('end_date', TIMESTAMP(timezone=True), nullable=False),
+    Column('current_page', Integer, nullable=False),
+    Column('last_search_after', JSONB),
+    Column('status', String(50), nullable=False),
+    Column('error_message', String),
+    Column('total_records', Integer),
+    Column('fetched_records', Integer),
+    Column('target_pause_time', TIMESTAMP(timezone=True)),
+    Column('initial_start_time', TIMESTAMP(timezone=True)),
+    Column(
+        'created_at',
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=text("timezone('Asia/Bangkok', NOW())"),
+    ),
+    Column(
+        'updated_at',
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=text("timezone('Asia/Bangkok', NOW())"),
+    ),
+    # เพิ่ม Primary Key Constraint
+    extend_existing=True,
+)
+
+# เพิ่ม Index
+Index('idx_batch_states_status', BATCH_STATES_TABLE.c.status, unique=False)
+Index('idx_batch_states_updated_at', BATCH_STATES_TABLE.c.updated_at, unique=False)
 
 # Context manager for database connection
 @contextmanager
 def get_db_connection():
     """Get database connection using SQLAlchemy"""
-    engine = create_engine(DB_CONNECTION)
     conn = engine.connect()
     trans = conn.begin()
     try:
@@ -19,85 +62,73 @@ def get_db_connection():
         conn.close()
         engine.dispose()
 
-# Main functions
-def ensure_batch_states_table_exists():
-    """Check if batch_states table exists, create if it doesn't"""
-    engine = create_engine(DB_CONNECTION)
-    
+# ฟังก์ชันสำหรับการสร้างตาราง
+def create_batch_states_table():
+    """Create the batch_states table if it doesn't exist."""
+    try:
+        # Check if the table exists, create if not
+        if not engine.has_table('batch_states'):
+            print("Creating batch_states table...")
+            metadata.create_all(engine)  # Create table with indexes
+            print("batch_states table and indexes created successfully.")
+        else:
+            print("batch_states table already exists.")
+    except SQLAlchemyError as e:
+        print(f"Error creating table: {str(e)}")
+        raise
+
+# ฟังก์ชันสำหรับตรวจสอบและเพิ่มคอลัมน์ทั้งหมด
+def ensure_all_columns_exist():
+    """Ensure all columns in the defined schema exist in the table."""
     try:
         with engine.connect() as connection:
-            # Check if table exists
-            check_table_query = text("""
-                SELECT EXISTS (
-                    SELECT FROM information_schema.tables 
-                    WHERE table_name = 'batch_states'
-                );
-            """)
+            inspector = inspect(connection)
 
-            table_exists = connection.execute(check_table_query).scalar()
-            
-            if not table_exists:
-                print("Creating batch_states table...")
-                create_table_query = text("""
-                    CREATE TABLE IF NOT EXISTS batch_states (
-                        batch_id VARCHAR(255),
-                        run_id VARCHAR(255),
-                        start_date TIMESTAMP WITH TIME ZONE NOT NULL,
-                        end_date TIMESTAMP WITH TIME ZONE NOT NULL,
-                        current_page INTEGER NOT NULL,
-                        last_search_after JSONB,
-                        status VARCHAR(50) NOT NULL,
-                        error_message TEXT,
-                        total_records INTEGER,
-                        fetched_records INTEGER,
-                        target_pause_time TIMESTAMP WITH TIME ZONE,
-                        initial_start_time TIMESTAMP WITH TIME ZONE,
-                        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT timezone('Asia/Bangkok', NOW()),
-                        updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT timezone('Asia/Bangkok', NOW()),
-                        PRIMARY KEY (batch_id, run_id)
-                    );
+            # Get the list of existing columns in the table
+            existing_columns = {col['name'] for col in inspector.get_columns('batch_states')}
+            print(f"Existing columns in 'batch_states': {existing_columns}")
 
-                    CREATE INDEX IF NOT EXISTS idx_batch_states_status 
-                    ON batch_states(status);
-                    
-                    CREATE INDEX IF NOT EXISTS idx_batch_states_updated_at 
-                    ON batch_states(updated_at);
-                """)
-                
-                connection.execute(create_table_query)
-                print("batch_states table created successfully")
-            else:
-                print("batch_states table already exists")
-                
-                # Check if initial_start_time column exists
-                check_column_query = text("""
-                    SELECT EXISTS (
-                        SELECT FROM information_schema.columns 
-                        WHERE table_name = 'batch_states' 
-                        AND column_name = 'initial_start_time'
-                    );
-                """)
-                
-                column_exists = connection.execute(check_column_query).scalar()
-                
-                if not column_exists:
-                    print("Adding initial_start_time column...")
-                    add_column_query = text("""
+            # Compare with the defined schema
+            for column in BATCH_STATES_TABLE.columns:
+                if column.name not in existing_columns:
+                    print(f"Adding missing column '{column.name}' to 'batch_states'...")
+                    alter_query = f"""
                         ALTER TABLE batch_states 
-                        ADD COLUMN initial_start_time TIMESTAMP WITH TIME ZONE;
-
-                        -- Update existing rows to set initial_start_time to created_at
-                        UPDATE batch_states 
-                        SET initial_start_time = created_at 
-                        WHERE initial_start_time IS NULL;
-                    """)
-                    
-                    connection.execute(add_column_query)
-                    connection.execute(text("COMMIT;"))
-                    print("initial_start_time column added successfully")
+                        ADD COLUMN {column.name} {str(column.type)};
+                    """
+                    connection.execute(alter_query)
+                    print(f"Column '{column.name}' added successfully.")
                 else:
-                    print("initial_start_time column already exists")
-                    
-    except Exception as e:
-        print(f"Error ensuring table exists: {str(e)}")
-        raise e
+                    print(f"Column '{column.name}' already exists in 'batch_states'.")
+    except SQLAlchemyError as e:
+        print(f"Error ensuring columns exist: {str(e)}")
+        raise
+
+# ฟังก์ชันสำหรับตรวจสอบและเพิ่ม Index
+def ensure_indexes_exist():
+    """Ensure indexes are created if not already present."""
+    try:
+        with engine.connect() as connection:
+            inspector = inspect(connection)
+
+            # ดึงรายการ Index ที่มีอยู่แล้ว
+            existing_indexes = {index['name'] for index in inspector.get_indexes('batch_states')}
+            if not existing_indexes:
+                print("No indexes exist on 'batch_states'.")
+            else:
+                print(f"Existing indexes: {existing_indexes}")
+
+            # สร้าง Index idx_batch_states_status ถ้ายังไม่มี
+            if 'idx_batch_states_status' not in existing_indexes:
+                print("Creating index 'idx_batch_states_status'...")
+                Index('idx_batch_states_status', BATCH_STATES_TABLE.c.status).create(engine)
+                print("Index 'idx_batch_states_status' created successfully.")
+
+            # สร้าง Index idx_batch_states_updated_at ถ้ายังไม่มี
+            if 'idx_batch_states_updated_at' not in existing_indexes:
+                print("Creating index 'idx_batch_states_updated_at'...")
+                Index('idx_batch_states_updated_at', BATCH_STATES_TABLE.c.updated_at).create(engine)
+                print("Index 'idx_batch_states_updated_at' created successfully.")
+    except SQLAlchemyError as e:
+        print(f"Error ensuring indexes exist: {str(e)}")
+        raise
