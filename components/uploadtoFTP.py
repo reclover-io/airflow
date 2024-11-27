@@ -90,6 +90,21 @@ def upload_csv_ctrl_to_ftp_server(default_emails: Dict[str, List[str]],
         # print("control_filename:", output_filename_ctrl)
         # print("dag_id:", dag_id)
 
+        save_batch_state(
+            batch_id=dag_id,
+            run_id=run_id,
+            start_date=conf.get('startDate'),
+            end_date=conf.get('endDate'),
+            current_page=batch_state.get('current_page', 1) if batch_state else 1,
+            last_search_after=batch_state.get('last_search_after') if batch_state else None,
+            status='COMPLETED',
+            error_message=None,
+            total_records=batch_state.get('total_records') if batch_state else None,
+            fetched_records=batch_state.get('fetched_records', 0) if batch_state else 0
+        )
+
+        print(f"Successfully uploaded files and updated state to COMPLETED")
+
         # Prepare paths
         csv_remote_path = f'/10.250.1.101/ELK/daily/source_data/landing/{dag_id}/'
         ctrl_remote_path = f'/10.250.1.101/ELK/daily/source_data/landing/{dag_id}/'
@@ -104,7 +119,7 @@ def upload_csv_ctrl_to_ftp_server(default_emails: Dict[str, List[str]],
 
         try:
             # Connect to FTPS
-            ftps_server = '192.168.1.111'
+            ftps_server = '34.124.138.144'
             username = 'airflow'
             password = 'airflow'
             ftps = connect_to_ftps(ftps_server, username, password)

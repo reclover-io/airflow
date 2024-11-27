@@ -113,17 +113,18 @@ def format_success_message(dag_id: str, run_id: str, current_time: datetime,
     
     total_seconds = elapsed_time.total_seconds()
     processing_rate = (fetched_records / total_seconds) if total_seconds > 0 else 0
-    
-    ftp_path = (
-        "ftps://10.250.1.101/ELK/daily/source_data/landing/ELK_MobileApp_Activity_Logs/"
-        if conf.get("ftp") else
-        "/data/batch/ELK_MobileApp_Activity_Logs/"
-    )
 
+    ftp_path = ""
+    ftp_config = ""
     csv_columns_html = format_csv_columns(conf)
 
-    ftp_config = (
-        "" if conf.get('ftp') else (
+    if conf.get("ftp") == None:
+        ftp_path = "ftps://10.250.1.101/ELK/daily/source_data/landing/ELK_MobileApp_Activity_Logs/"
+    
+
+    elif conf.get("ftp") == False:
+        ftp_path = "/data/batch/ELK_MobileApp_Activity_Logs/"
+        ftp_config = (
             "<h3>Batch Configuration:</h3>"
             "<ul>"
             f"<li>Start Date: {conf.get('startDate')}</li>"
@@ -131,8 +132,10 @@ def format_success_message(dag_id: str, run_id: str, current_time: datetime,
             f"{csv_columns_html}"
             "</ul>"
         )
-    )
-
+    elif conf.get("ftp") == True:
+        ftp_path = "ftps://10.250.1.101/ELK/daily/source_data/landing/ELK_MobileApp_Activity_Logs/"
+        
+        
     return f"""
         <p><strong>Batch Name:</strong> {dag_id}</p>
         <p><strong>Run ID:</strong> {run_id}</p>
