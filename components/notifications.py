@@ -40,7 +40,7 @@ def get_notification_recipients(conf: Dict, notification_type: str, default_emai
         success_recipients = conf.get('emailSuccess', default_emails.get('emailSuccess', []))
         if not isinstance(success_recipients, list):
             success_recipients = [success_recipients]
-        return success_recipients
+        return list(set(all_recipients + success_recipients))
     
     type_map = {
         'success': 'emailSuccess',
@@ -150,8 +150,8 @@ def format_success_message(dag_id: str, run_id: str, current_time: datetime,
         <h3>Output Information:</h3>
         <ul>
             <li>Path: {ftp_path}</li>
-            <li>CSV Filename: {csv_filename}</li>
-            <li>Control Filename: {control_filename}</li>
+            <li>CSV Filename: {csv_filename}.csv</li>
+            <li>Control Filename: {csv_filename}.ctrl</li>
         </ul>
         
         {ftp_config}
