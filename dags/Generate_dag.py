@@ -2,7 +2,6 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.utils.dates import days_ago
 from datetime import timedelta
-import os
 
 # ฟังก์ชันสำหรับสร้างไฟล์ DAG ใหม่
 def create_dag_file(**kwargs):
@@ -11,7 +10,13 @@ def create_dag_file(**kwargs):
     dag_name = config.get('DAG_NAME', 'default_dag_name')
     csv_columns = config.get('DEFAULT_CSV_COLUMNS', ['col1', 'col2', 'col3'])
     authorization = config.get('AUTHORIZATION', 'default_authorization_token')
-    schedule_interval = config.get('SCHEDULT_INTERVAL','* 0 * * *')
+    schedule_interval = config.get('SCHEDULT_INTERVAL','0 0 * * *')
+    email = config.get('EMAIL', [])
+    emailSuccess = config.get('EMAIL_SUCCESS', [])
+    emailFail = config.get('EMAIL_FAIL', [])
+    emailPause = config.get('EMAIL_PAUSE', [])
+    emailResume = config.get('EMAIL_RESUME', [])
+    emailStart = config.get('EMAIL_START', [])
 
     # Template ของ DAG ใหม่ที่เหมือนกับ Friend_MB_Noti_Spending.py
     dag_content = f"""
@@ -20,14 +25,13 @@ from airflow.operators.python import PythonOperator
 from airflow.utils.trigger_rule import TriggerRule
 from datetime import datetime, timedelta
 from components.check_previous_failed_batch import check_previous_failed_batch
-import pytz
 
 from components.notifications import (
     send_running_notification,
     send_success_notification, 
     send_failure_notification
 )
-from components.process import process_data, check_pause_status
+from components.process import process_data
 from components.constants import *
 from components.uploadtoFTP import *
 from components.validators import validate_input_task
@@ -48,12 +52,12 @@ CONTROL_DIR = f'/opt/airflow/data/batch/{{DAG_NAME}}'
 slack_webhook = ""
 
 default_emails = {{
-    'email': ['elk_team@gmail.com'],
-    'emailSuccess': [],
-    'emailFail': [],
-    'emailPause': [],
-    'emailResume': [],
-    'emailStart': []
+    'email': {email},
+    'emailSuccess': {emailSuccess},
+    'emailFail': {emailFail},
+    'emailPause': {emailPause},
+    'emailResume': {emailResume},
+    'emailStart': {emailStart}
 }}
 
 DEFAULT_CSV_COLUMNS = {csv_columns}
