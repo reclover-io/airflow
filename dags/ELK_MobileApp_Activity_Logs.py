@@ -45,7 +45,7 @@ default_emails = {
     'emailStart': []
 }
 
-DEFAULT_CSV_COLUMNS = ['RequestID', 'Path', 'UserToken', 'RequestDateTime', '_id', 'Status', 'CounterCode']
+DEFAULT_CSV_COLUMNS = ['RequestID', 'Path', 'UserToken', 'RequestDateTime', 'Status', 'CounterCode']
 
 # Default arguments for the DAG
 default_args = {
