@@ -170,6 +170,16 @@ services:
         condition: service_completed_successfully
     networks:
       - airflow-net
+      
+  airflow-custom-builder: # บริการใหม่สำหรับสร้าง Custom Image
+    image: custom-airflow:2.6.3
+    build:
+      context: .
+      dockerfile: Dockerfile  # ใช้ไฟล์ Dockerfile ใน directory ปัจจุบัน
+    container_name: airflow-custom-builder
+    command: ["echo", "Custom Airflow Image Built Successfully"]
+    profiles:
+      - build # เพิ่มโปรไฟล์ build เพื่อรันเฉพาะเมื่อใช้คำสั่ง build
 
   airflow-init:
     <<: *airflow-common
