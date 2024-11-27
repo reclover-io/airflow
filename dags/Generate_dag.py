@@ -78,6 +78,13 @@ with DAG(
     tags=['api', 'csv', 'backup']
 ) as dag:
     
+    check_previous_fails = PythonOperator(
+        task_id='check_previous_failed_batch',
+        python_callable=check_previous_failed_batch,
+        provide_context=True,
+        trigger_rule=TriggerRule.ALL_SUCCESS
+    )
+
     validate_input = PythonOperator(
         task_id='validate_input',
         python_callable=validate_input_task,
@@ -125,9 +132,10 @@ with DAG(
     )
     
     # Define Dependencies
-    validate_input >> [running_notification, failure_notification]
+    validate_input >> check_previous_fails >> [running_notification, failure_notification]
     running_notification >> process_task >> [uploadtoFTP, failure_notification]
     uploadtoFTP >> [success_notification, failure_notification]
+    process_task >> success_notification
 """
 
 
