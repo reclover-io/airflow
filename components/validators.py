@@ -419,6 +419,10 @@ def validate_config(conf: Dict, DEFAULT_CSV_COLUMNS: List[str], context: Dict) -
     if not is_valid:
         errors.append(f"Invalid check_fail: {error_message}")
 
+    is_valid, error_message = validate_slack_config(conf, context)
+    if not is_valid:
+        errors.append(f"Slack Configuration Error: {error_message}")
+
     if errors:
         error_message = "Configuration Validation Failed:\n"
         for i, error in enumerate(errors, 1):
@@ -499,3 +503,25 @@ def validate_check_fail(conf: Dict) -> Tuple[bool, Optional[str]]:
     if check_fail is not None and not isinstance(check_fail, bool):
         return False, "check_fail must be a boolean value"
     return True, None
+
+def validate_slack_config(conf: Dict, context: Dict) -> Tuple[bool, Optional[str]]:
+    """
+    Validate FTP configuration and store setting in XCom
+    Returns (is_valid, error_message)
+    """
+    try:
+        slack_value = conf.get('slack')
+        if slack_value is not None and not isinstance(slack_value, bool):
+            return False, "Slack configuration must be a boolean (true/false)"
+
+        should_slack = conf.get('slack', False)
+        ti = context.get('task_instance')
+        if ti:
+            ti.xcom_push(key='should_slack', value=should_slack)
+            print(f"Stored FTP setting in XCom: {should_slack}")
+        else:
+            print("Warning: task_instance not found in context")
+        return True, None
+
+    except Exception as e:
+        return False, f"Failed to validate Slack configuration: {str(e)}"
