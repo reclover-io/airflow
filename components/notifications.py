@@ -40,7 +40,7 @@ def get_notification_recipients(conf: Dict, notification_type: str, default_emai
         success_recipients = conf.get('emailSuccess', default_emails.get('emailSuccess', []))
         if not isinstance(success_recipients, list):
             success_recipients = [success_recipients]
-        return success_recipients
+        return list(set(all_recipients + success_recipients))
     
     type_map = {
         'success': 'emailSuccess',
