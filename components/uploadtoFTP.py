@@ -3,6 +3,10 @@ import os
 from airflow.exceptions import AirflowSkipException, AirflowException
 from typing import Optional, Dict, List
 from components.notifications import send_retry_notification
+from components.database import (
+    get_batch_state, 
+    save_batch_state,
+)
 
 
 def connect_to_ftps(server, username, password):
@@ -66,6 +70,9 @@ def upload_csv_ctrl_to_ftp_server(default_emails: Dict[str, List[str]],
         run_id = dag_run.run_id
         conf = dag_run.conf or {}
 
+        # ดึงข้อมูล state ปัจจุบัน
+        batch_state = get_batch_state(dag_id, run_id)
+
         # Skip task if configured to do so
         should_upload_ftp = ti.xcom_pull(key='should_upload_ftp', task_ids='validate_input')
         if not should_upload_ftp:
@@ -97,7 +104,7 @@ def upload_csv_ctrl_to_ftp_server(default_emails: Dict[str, List[str]],
 
         try:
             # Connect to FTPS
-            ftps_server = '34.124.138.144'
+            ftps_server = '192.168.1.111'
             username = 'airflow'
             password = 'airflow'
             ftps = connect_to_ftps(ftps_server, username, password)
@@ -127,6 +134,20 @@ def upload_csv_ctrl_to_ftp_server(default_emails: Dict[str, List[str]],
     except Exception as e:
         error_msg = str(e)
         ti.xcom_push(key='error_message', value=error_msg)
+
+        # บันทึกสถานะ FAILED ลงฐานข้อมูล
+        save_batch_state(
+            batch_id=dag_id,
+            run_id=run_id,
+            start_date=conf.get('startDate'),
+            end_date=conf.get('endDate'),
+            current_page=batch_state.get('current_page', 1) if batch_state else 1,
+            last_search_after=batch_state.get('last_search_after') if batch_state else None,
+            status='FAILED',
+            error_message=f"FTP upload failed: {error_msg}",
+            total_records=batch_state.get('total_records') if batch_state else None,
+            fetched_records=batch_state.get('fetched_records', 0) if batch_state else 0
+        )
 
         # Don't send retry notification for skipped tasks
         if not isinstance(e, AirflowSkipException):

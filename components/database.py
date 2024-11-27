@@ -157,10 +157,20 @@ def get_failed_batch_runs(dag_id: str) -> List[Dict]:
         print(f"DAG ID: {dag_id}")
         
         query = text("""
-            SELECT *
-            FROM dag_run
-            WHERE state = 'failed'
-            ORDER BY execution_date ASC;
+            SELECT d.run_id, 
+                   d.dag_id, 
+                   d.execution_date, 
+                   d.start_date,
+                   d.end_date,
+                   b.status,
+                   b.error_message,
+                   b.created_at,
+                   b.updated_at
+            FROM dag_run d
+            JOIN batch_states b ON d.run_id = b.run_id
+            WHERE d.dag_id = :dag_id
+            AND b.status = 'FAILED'
+            ORDER BY d.execution_date ASC
         """)
         
         try:
@@ -173,10 +183,8 @@ def get_failed_batch_runs(dag_id: str) -> List[Dict]:
                 print(f"\nFound {len(result)} failed batches:")
                 for row in result:
                     print(f"\nRun ID: {row['run_id']}")
-                    print(f"State: {row['state']}")
+                    print(f"Status: {row['status']}")
                     print(f"Execution Date: {row['execution_date']}")
-                    print(f"Start Date: {row['start_date']}")
-                    print(f"End Date: {row['end_date']}")
             else:
                 print("No failed batches found in database")
             
@@ -189,7 +197,7 @@ def get_failed_batch_runs(dag_id: str) -> List[Dict]:
                     'execution_date': row['execution_date'],
                     'start_date': row['start_date'],
                     'end_date': row['end_date'],
-                    'state': row['state']
+                    'status': row['status']
                 })
             
             return failed_batches
