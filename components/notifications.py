@@ -150,8 +150,8 @@ def format_success_message(dag_id: str, run_id: str, current_time: datetime,
         <h3>Output Information:</h3>
         <ul>
             <li>Path: {ftp_path}</li>
-            <li>CSV Filename: {csv_filename}</li>
-            <li>Control Filename: {control_filename}</li>
+            <li>CSV Filename: {csv_filename}.csv</li>
+            <li>Control Filename: {csv_filename}.ctrl</li>
         </ul>
         
         {ftp_config}
