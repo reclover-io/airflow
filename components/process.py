@@ -3,6 +3,8 @@ from datetime import datetime, timedelta
 from airflow.exceptions import AirflowException
 import shutil
 import os
+import signal
+from contextlib import contextmanager
 
 from components.database import (
     get_batch_state, 
@@ -35,6 +37,49 @@ class APIException(Exception):
 
 class NoDataException(Exception):
     pass
+
+@contextmanager
+def handle_termination(batch_id: str, run_id: str, start_date: str, end_date: str, 
+                      page: int, search_after: Optional[List[str]], 
+                      total_records: Optional[int], fetched_count: int):
+    """
+    Context manager to handle graceful termination
+    """
+    sigterm_received = {'terminated': False, 'from_airflow': False}
+    original_handler = signal.getsignal(signal.SIGTERM)
+
+    def sigterm_handler(signum, frame):
+        print("Received SIGTERM. Finishing current operation...")
+        sigterm_received['terminated'] = True
+        # เช็คว่าเป็นการ set state จาก Airflow หรือไม่
+        import traceback
+        stack = traceback.extract_stack()
+        sigterm_received['from_airflow'] = any(
+            'local_task_job_runner.py' in frame.filename 
+            for frame in stack
+        )
+
+    try:
+        signal.signal(signal.SIGTERM, sigterm_handler)
+        yield sigterm_received
+    finally:
+        signal.signal(signal.SIGTERM, original_handler)
+        if sigterm_received['terminated']:
+            print("Saving final state before termination...")
+            error_msg = "Task received SIGTERM signal" if sigterm_received['from_airflow'] else "Task received SIGTERM signal"
+            save_batch_state(
+                batch_id=batch_id,
+                run_id=run_id,
+                start_date=start_date,
+                end_date=end_date,
+                current_page=page,
+                last_search_after=search_after,
+                status='FAILED',
+                error_message=error_msg,
+                total_records=total_records,
+                fetched_records=fetched_count
+            )
+            raise AirflowException(error_msg)
 
 # State handling functions
 def handle_pause(conf: Dict, state_status: Optional[str], dag_id: str, run_id: str) -> bool:
@@ -226,9 +271,19 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
         records, total, next_search_after = fetch_data_page(start_date, end_date, search_after, API_URL, API_HEADERS)
         total_records = total
         fetched_count = batch_state['fetched_records']
+
+        # ใช้ total_records จาก API ถ้ามีความแตกต่าง
+        if batch_state['total_records'] != total:
+            print(f"Warning: total_records mismatch. Previous: {batch_state['total_records']}, Current: {total}")
+            total_records = total
+        else:
+            total_records = batch_state['total_records']
+
         print(f"Resuming from state {state_status} at page {page} with {fetched_count} records already fetched")
         print(f"Last search after: {search_after}")
         
+        page += 1
+
         if os.path.exists(temp_file_path):
             print(f"Found existing temp file: {temp_file_path}")
             should_write_header = False
@@ -285,102 +340,122 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
         )
         
         while True:
-            # ตรวจสอบเวลา pause ก่อนดึงข้อมูล
-            if handle_pause(conf, state_status, dag_id, run_id):
-                print("Pause condition met during processing")
-                save_batch_state(
-                    batch_id=dag_id,
-                    run_id=run_id,
-                    start_date=start_date,
-                    end_date=end_date,
-                    current_page=page,
-                    last_search_after=search_after,
-                    status='PAUSED',
-                    error_message=None,
-                    total_records=total_records,
-                    fetched_records=fetched_count
-                )
-                msg = f"Batch paused at {format_thai_time(get_thai_time())}"
-                print(msg)
-                return {'status': 'paused', 'message': msg}
-            
-            print(f"\nFetching page {page}...")
-            
-            try:
-                records, total, next_search_after = fetch_data_page(start_date, end_date, search_after, API_URL, API_HEADERS)
-            except (APIException, NoDataException) as e:
-                save_batch_state(
-                    batch_id=dag_id,
-                    run_id=run_id,
-                    start_date=start_date,
-                    end_date=end_date,
-                    current_page=page,
-                    last_search_after=search_after,
-                    status='FAILED',
-                    error_message=str(e),
-                    total_records=total_records,
-                    fetched_records=fetched_count
-                )
+            with handle_termination(
+                batch_id=dag_id,
+                run_id=run_id,
+                start_date=start_date,
+                end_date=end_date,
+                page=page,
+                search_after=search_after,
+                total_records=total_records,
+                fetched_count=fetched_count
+            ) as termination:
+                # ตรวจสอบเวลา pause ก่อนดึงข้อมูล
+                if handle_pause(conf, state_status, dag_id, run_id):
+                    print("Pause condition met during processing")
+                    save_batch_state(
+                        batch_id=dag_id,
+                        run_id=run_id,
+                        start_date=start_date,
+                        end_date=end_date,
+                        current_page=page,
+                        last_search_after=search_after,
+                        status='PAUSED',
+                        error_message=None,
+                        total_records=total_records,
+                        fetched_records=fetched_count
+                    )
+                    msg = f"Batch paused at {format_thai_time(get_thai_time())}"
+                    print(msg)
+                    return {'status': 'paused', 'message': msg}
+                
+                print(f"\nFetching page {page}...")
+                
+                try:
+                    records, total, next_search_after = fetch_data_page(start_date, end_date, search_after, API_URL, API_HEADERS)
+                except (APIException, NoDataException) as e:
+                    save_batch_state(
+                        batch_id=dag_id,
+                        run_id=run_id,
+                        start_date=start_date,
+                        end_date=end_date,
+                        current_page=page,
+                        last_search_after=search_after,
+                        status='FAILED',
+                        error_message=str(e),
+                        total_records=total_records,
+                        fetched_records=fetched_count
+                    )
 
-                raise e
-            
-            if handle_pause(conf, state_status, dag_id, run_id):
-                save_batch_state(
-                    batch_id=dag_id,
-                    run_id=run_id,
-                    start_date=start_date,
-                    end_date=end_date,
-                    current_page=page,
-                    last_search_after=search_after,
-                    status='PAUSED',
-                    error_message=f"Batch paused at {format_thai_time(get_thai_time())}",
-                    total_records=total_records,
-                    fetched_records=fetched_count
-                )
-                msg = f"Batch paused at {format_thai_time(get_thai_time())} due to configured pause time"
-                print(msg)
-                if os.path.exists(temp_file_path):
-                    print(f"Keeping temp file for continuation: {temp_file_path}")
-                return {'status': 'paused', 'message': msg}
-            
-            if total_records is None:
-                total_records = total
-                print(f"Total records to fetch: {total_records}")
-            
-            current_page_size = len(records)
-            print(f"Current page size: {current_page_size}")
-            
-            if current_page_size > 0:
-                save_temp_data(records, temp_file_path, headers=should_write_header, columns=csv_columns)
-                should_write_header = False
+                    raise e
                 
-                fetched_count += current_page_size
-                print(f"Fetched page {page}, got {current_page_size} records. "
-                      f"Total fetched: {fetched_count}/{total_records}")
+                if handle_pause(conf, state_status, dag_id, run_id):
+                    save_batch_state(
+                        batch_id=dag_id,
+                        run_id=run_id,
+                        start_date=start_date,
+                        end_date=end_date,
+                        current_page=page,
+                        last_search_after=search_after,
+                        status='PAUSED',
+                        error_message=f"Batch paused at {format_thai_time(get_thai_time())}",
+                        total_records=total_records,
+                        fetched_records=fetched_count
+                    )
+                    msg = f"Batch paused at {format_thai_time(get_thai_time())} due to configured pause time"
+                    print(msg)
+                    if os.path.exists(temp_file_path):
+                        print(f"Keeping temp file for continuation: {temp_file_path}")
+                    return {'status': 'paused', 'message': msg}
                 
-                save_batch_state(
-                    batch_id=dag_id,
-                    run_id=run_id,
-                    start_date=start_date,
-                    end_date=end_date,
-                    current_page=page,
-                    last_search_after=next_search_after,
-                    status='RUNNING',
-                    error_message=None,
-                    total_records=total_records,
-                    fetched_records=fetched_count
-                )
-            
-            if (fetched_count >= total_records or 
-                current_page_size < PAGE_SIZE or 
-                current_page_size == 0):
-                print(f"Stopping pagination: fetched_count={fetched_count}, "
-                      f"total_records={total_records}, "
-                      f"current_page_size={current_page_size}")
-                break
+                if total_records is None:
+                    total_records = total
+                    print(f"Total records to fetch: {total_records}")
                 
-            search_after = next_search_after
-            page += 1
+                current_page_size = len(records)
+                print(f"Current page size: {current_page_size}")
+                
+                if current_page_size > 0:
+
+                    # เช็คก่อนเพิ่ม fetched_count
+                    if total_records and (fetched_count + current_page_size) > total_records:
+                        # ถ้าจะเกิน total_records ให้ปรับจำนวน records ที่จะเพิ่ม
+                        current_page_size = total_records - fetched_count
+                        records = records[:current_page_size]  # ตัดข้อมูลส่วนเกินทิ้ง
+
+                    save_temp_data(records, temp_file_path, headers=should_write_header, columns=csv_columns)
+                    should_write_header = False
+                    
+                    fetched_count += current_page_size
+                    print(f"Fetched page {page}, got {current_page_size} records. "
+                        f"Total fetched: {fetched_count}/{total_records}")
+                    
+                    save_batch_state(
+                        batch_id=dag_id,
+                        run_id=run_id,
+                        start_date=start_date,
+                        end_date=end_date,
+                        current_page=page,
+                        last_search_after=next_search_after,
+                        status='RUNNING',
+                        error_message=None,
+                        total_records=total_records,
+                        fetched_records=fetched_count
+                    )
+
+                if termination['terminated']:
+                    break
+                
+                if (fetched_count >= total_records or 
+                    current_page_size < PAGE_SIZE or 
+                    current_page_size == 0):
+                    print(f"Stopping pagination: fetched_count={fetched_count}, "
+                        f"total_records={total_records}, "
+                        f"current_page_size={current_page_size}")
+                    break
+                    
+                search_after = next_search_after
+                page += 1
         
         thai_time = get_thai_time()
         final_filename = get_formatted_filename(filename_template, dag_id, thai_time)
@@ -499,9 +574,18 @@ def process_data(API_URL: str, TEMP_DIR: str, OUTPUT_DIR: str,CONTROL_DIR: str, 
             ti.xcom_push(key='error_message', value=error_msg)
             try_number = ti.try_number
             max_retries = ti.max_tries
+
+            # เพิ่มเช็คว่าเป็น SIGTERM หรือไม่
+            is_sigterm = any(msg in str(e) for msg in [
+                "Task received SIGTERM signal",
+                "Task received SIGKILL signal",
+                "Task was cancelled externally",
+                "Received SIGTERM. Terminating subprocesses",
+                "State of this instance has been externally set to failed"
+            ])
             
             # Send retry notification if this is not the last retry
-            if try_number <= max_retries:
+            if try_number <= max_retries and not is_sigterm:
                 send_retry_notification(
                     dag_id=dag_run.dag_id,
                     run_id=run_id,

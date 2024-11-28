@@ -424,7 +424,7 @@ def validate_config(conf: Dict, DEFAULT_CSV_COLUMNS: List[str], context: Dict) -
         errors.append(f"Slack Configuration Error: {error_message}")
 
     if errors:
-        error_message = "Configuration Validation Failed:\n"
+        error_message = ""
         for i, error in enumerate(errors, 1):
             error_message += f"\n{i}. {error}"
         return False, error_message

@@ -2,7 +2,7 @@ from typing import Dict, List
 from datetime import datetime
 from airflow.utils.email import send_email
 from airflow.exceptions import AirflowException
-import pytz
+import re
 from typing import Dict, List, Optional, Tuple
 from components.constants import THAI_TZ
 from components.database import save_batch_state
@@ -26,6 +26,11 @@ def format_csv_columns(conf: Dict) -> str:
         return f"<li>CSV Column: [ {', '.join(csv_columns)} ]</li>"
     return ""
 
+def validate_single_email(email: str) -> bool:
+    """Validate single email address"""
+    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return bool(re.match(email_pattern, email))
+
 def get_notification_recipients(conf: Dict, notification_type: str, default_emails: Dict[str, List[str]]) -> List[str]:
     """
     Get email recipients based on notification type
@@ -35,11 +40,15 @@ def get_notification_recipients(conf: Dict, notification_type: str, default_emai
     all_recipients = conf.get('email', default_emails.get('email', []))
     if not isinstance(all_recipients, list):
         all_recipients = [all_recipients]
+
+    all_recipients = [email for email in all_recipients if validate_single_email(email)]
     
     if notification_type == 'success':
         success_recipients = conf.get('emailSuccess', default_emails.get('emailSuccess', []))
         if not isinstance(success_recipients, list):
             success_recipients = [success_recipients]
+
+        success_recipients = [email for email in success_recipients if validate_single_email(email)]
         return list(set(all_recipients + success_recipients))
     
     type_map = {
@@ -55,6 +64,8 @@ def get_notification_recipients(conf: Dict, notification_type: str, default_emai
         type_recipients = conf.get(config_key, default_emails.get(config_key, []))
         if not isinstance(type_recipients, list):
             type_recipients = [type_recipients]
+        
+        type_recipients = [email for email in type_recipients if validate_single_email(email)]
         
         combined_recipients = list(set(all_recipients + type_recipients))
         return combined_recipients

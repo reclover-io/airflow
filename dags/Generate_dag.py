@@ -17,6 +17,7 @@ def create_dag_file(**kwargs):
     emailPause = config.get('EMAIL_PAUSE', [])
     emailResume = config.get('EMAIL_RESUME', [])
     emailStart = config.get('EMAIL_START', [])
+    start_date = config.get('START_DATE','2024, 1, 1')
 
     # Template ของ DAG ใหม่ที่เหมือนกับ Friend_MB_Noti_Spending.py
     dag_content = f"""
@@ -78,7 +79,7 @@ with DAG(
     default_args=default_args,
     description='Fetch API data with date range and save to CSV',
     schedule_interval="{schedule_interval}",
-    start_date=datetime(2024, 1, 1),
+    start_date=datetime({start_date}),
     catchup=False,
     tags=['api', 'csv', 'backup']
 ) as dag:
