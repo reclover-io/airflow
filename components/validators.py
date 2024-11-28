@@ -415,12 +415,28 @@ def validate_config(conf: Dict, DEFAULT_CSV_COLUMNS: List[str], context: Dict) -
         if not is_valid:
             errors.append(f"Invalid start_run: {error_message}")
 
+    is_valid, error_message = validate_slack_config(conf, context)
+    if not is_valid:
+        errors.append(f"Slack Configuration Error: {error_message}")
+
+    errors.reverse()
     if errors:
-        error_message = "Configuration Validation Failed:\n"
+        
+        error_message = "Configuration Validation Failed:<ol>"
+        for error in errors:
+            error_message += f"<li>{error}</li>"
+        error_message += "</ol>"
+
+        error_message_format = "Configuration Validation Failed:\n"
         for i, error in enumerate(errors, 1):
-            error_message += f"\n{i}. {error}"
-        return False, error_message
+            error_message_format += f"\n{i}. {error}\n"
+
+        return False, error_message , error_message_format
+
+
     
+        context['task_instance'].xcom_push(key='error_message', value=error_msg)
+
     return True, None
 
 def validate_input_task(default_csv_columns: List[str], default_emails: Dict[str, List[str]], **context):
@@ -449,11 +465,12 @@ def validate_input_task(default_csv_columns: List[str], default_emails: Dict[str
         conf = dag_run.conf
         
         # Use existing validate_config function
-        is_valid, error_message = validate_config(conf, default_csv_columns, context)
+        is_valid, error_message , error_message_format = validate_config(conf, default_csv_columns, context)
+        
         
         if not is_valid:
             context['task_instance'].xcom_push(key='error_message', value=error_message)
-            raise AirflowException(f"Configuration validation failed: {error_message}")
+            raise AirflowException(f"{error_message_format}")
             
         # If validation passed, store result in XCom
         context['task_instance'].xcom_push(key='validation_result', value=True)
@@ -462,7 +479,6 @@ def validate_input_task(default_csv_columns: List[str], default_emails: Dict[str
         error_msg = str(e)
         if not isinstance(e, AirflowException):
             error_msg = f"Unexpected error during validation: {error_msg}"
-        context['task_instance'].xcom_push(key='error_message', value=error_msg)
         raise AirflowException(error_msg)
     
 def validate_ftp_config(conf: Dict, context: Dict) -> Tuple[bool, Optional[str]]:
@@ -488,3 +504,25 @@ def validate_ftp_config(conf: Dict, context: Dict) -> Tuple[bool, Optional[str]]
 
     except Exception as e:
         return False, f"Failed to validate FTP configuration: {str(e)}"
+
+def validate_slack_config(conf: Dict, context: Dict) -> Tuple[bool, Optional[str]]:
+    """
+    Validate FTP configuration and store setting in XCom
+    Returns (is_valid, error_message)
+    """
+    try:
+        slack_value = conf.get('slack')
+        if slack_value is not None and not isinstance(slack_value, bool):
+            return False, "Slack configuration must be a boolean (true/false)"
+
+        should_slack = conf.get('slack', False)
+        ti = context.get('task_instance')
+        if ti:
+            ti.xcom_push(key='should_slack', value=should_slack)
+            print(f"Stored FTP setting in XCom: {should_slack}")
+        else:
+            print("Warning: task_instance not found in context")
+        return True, None
+
+    except Exception as e:
+        return False, f"Failed to validate Slack configuration: {str(e)}"

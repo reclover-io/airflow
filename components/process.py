@@ -472,8 +472,11 @@ def process_data(API_URL: str, TEMP_DIR: str, OUTPUT_DIR: str,CONTROL_DIR: str, 
                 return result
             
             output_path, csv_filename = result
-            ti.xcom_push(key='output_filename', value=csv_filename)
-            
+            csv_filename_final = csv_filename + '.csv'
+            ctrl_filename_final = csv_filename + '.ctrl'    
+            ti.xcom_push(key='output_filename', value=csv_filename_final)
+            ti.xcom_push(key='control_filename', value=ctrl_filename_final)
+
             # Get batch state for total records
             batch_state = get_batch_state(dag_run.dag_id, run_id)
             total_records = batch_state.get('total_records', 0) if batch_state else 0
@@ -482,17 +485,16 @@ def process_data(API_URL: str, TEMP_DIR: str, OUTPUT_DIR: str,CONTROL_DIR: str, 
             control_path, control_filename = create_control_file(
                 start_date=start_date,
                 total_records=total_records,
-                csv_filename=csv_filename,
+                csv_filename=csv_filename_final,
+                ctrl_filename=ctrl_filename_final,
                 dag_id=dag_run.dag_id,
                 conf=conf,
-                CONTROL_DIR=CONTROL_DIR,
-                filename=csv_filename
+                CONTROL_DIR=CONTROL_DIR
             )
             
             # Store control filename in XCom
-            ti.xcom_push(key='control_filename', value=control_filename)
             
-            return (output_path, csv_filename, control_path, control_filename)
+            return (output_path, csv_filename_final, control_path, ctrl_filename_final)
             
         except Exception as e:
             error_msg = str(e)
