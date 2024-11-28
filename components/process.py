@@ -200,6 +200,7 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     
     try:
+        
         csv_columns = get_csv_columns(conf, DEFAULT_CSV_COLUMNS)
         print(f"Using CSV columns: {csv_columns}")
     except AirflowException as e:
@@ -321,7 +322,6 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
                     fetched_records=fetched_count
                 )
 
-
                 raise e
             
             if handle_pause(conf, state_status, dag_id, run_id):
@@ -384,7 +384,9 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
         
         thai_time = get_thai_time()
         final_filename = get_formatted_filename(filename_template, dag_id, thai_time)
-        final_path = os.path.join(output_path, final_filename)
+        final_filename_csv = final_filename + '.csv'
+
+        final_path = os.path.join(output_path, final_filename_csv)
 
         # ถ้า directory ไม่มี ให้สร้างใหม่
         os.makedirs(os.path.dirname(final_path), exist_ok=True)
@@ -483,7 +485,8 @@ def process_data(API_URL: str, TEMP_DIR: str, OUTPUT_DIR: str,CONTROL_DIR: str, 
                 csv_filename=csv_filename,
                 dag_id=dag_run.dag_id,
                 conf=conf,
-                CONTROL_DIR=CONTROL_DIR
+                CONTROL_DIR=CONTROL_DIR,
+                filename=csv_filename
             )
             
             # Store control filename in XCom

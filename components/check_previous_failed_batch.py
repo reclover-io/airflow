@@ -16,7 +16,6 @@ def check_previous_failed_batch(**context):
     dag_run = context['dag_run']
     dag_id = dag_run.dag_id
     conf = dag_run.conf or {}
-    current_run_id = dag_run.run_id
 
     check_fail = conf.get('check_fail', True)  # Default to True if not specified
     if not check_fail:
@@ -47,7 +46,7 @@ def check_previous_failed_batch(**context):
             if batch['run_id'] in run_ids_to_process
         ]
         # Sort by DAG start date to maintain chronological order
-        failed_batches.sort(key=lambda x: x['dag_start_date'])
+        failed_batches.sort(key=lambda x: x['execution_date'])
     else:
         # Get all failed batches ordered by start date
         print("No specific run_ids provided, processing all failed batches")

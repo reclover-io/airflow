@@ -67,7 +67,7 @@ def get_formatted_filename(template: str, dag_id: str, timestamp: datetime) -> s
     try:
         if not template:
             default_format = timestamp.strftime('%Y%m%d%H%M%S')
-            return f"{dag_id}_{default_format}.csv"
+            return f"{dag_id}_{default_format}"
         
         pattern = r'\{(date_time|date|time)(?::([^}]+))?\}'
         
@@ -101,7 +101,6 @@ def get_formatted_filename(template: str, dag_id: str, timestamp: datetime) -> s
         filename = re.sub(pattern, replace_match, template)
         
         filename = filename.replace('{dag_id}', dag_id)
-        
         # ถ้าไม่มีนามสกุลไฟล์ ให้เพิ่ม .csv
         if not filename.endswith('.csv'):
             filename += '.csv'
@@ -117,7 +116,7 @@ def get_formatted_filename(template: str, dag_id: str, timestamp: datetime) -> s
             raise
         raise AirflowException(f"Error formatting filename: {str(e)}")
 
-def get_control_file_config(conf: Dict, dag_id: str, timestamp: datetime, CONTROL_DIR: str) -> Tuple[str, str]:
+def get_control_file_config(conf: Dict, dag_id: str, timestamp: datetime, CONTROL_DIR: str, filename: str) -> Tuple[str, str]:
     """
     Get control file path and name configuration
     Returns (control_path, control_filename)
@@ -134,12 +133,12 @@ def get_control_file_config(conf: Dict, dag_id: str, timestamp: datetime, CONTRO
         control_filename = os.path.splitext(control_filename)[0] + '.ctrl'
     else:
         # ใช้ default format
-        control_filename = f"{dag_id}_{timestamp.strftime('%Y%m%d%H%M%S')}.ctrl"
+        control_filename = f"{filename}.ctrl"
     
     return control_path, control_filename
 
 def create_control_file(start_date: str, total_records: int, csv_filename: str,
-                       dag_id: str, conf: Dict, CONTROL_DIR: str) -> Tuple[str, str]:
+                       dag_id: str, conf: Dict, CONTROL_DIR: str, filename: str) -> Tuple[str, str]:
     """
     Create control file with summary information
     Returns (control_path, control_filename)
@@ -151,7 +150,7 @@ def create_control_file(start_date: str, total_records: int, csv_filename: str,
         process_date = process_time.strftime('%Y-%m-%d %H:%M:%S')
         
         # Get control file configuration
-        control_path, control_filename = get_control_file_config(conf, dag_id, process_time,CONTROL_DIR)
+        control_path, control_filename = get_control_file_config(conf, dag_id, process_time,CONTROL_DIR, filename)
         
         # สร้าง DataFrame สำหรับ control file
         control_data = {
