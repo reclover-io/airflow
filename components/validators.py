@@ -437,7 +437,7 @@ def validate_config(conf: Dict, DEFAULT_CSV_COLUMNS: List[str], context: Dict) -
     
         context['task_instance'].xcom_push(key='error_message', value=error_msg)
 
-    return True, None
+    return True, None, None
 
 def validate_input_task(default_csv_columns: List[str], default_emails: Dict[str, List[str]], **context):
     """Validate input configuration using existing validate_config function"""

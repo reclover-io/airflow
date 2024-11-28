@@ -91,13 +91,15 @@ def upload_csv_ctrl_to_ftp_server(default_emails: Dict[str, List[str]],
 
         # Verify local files exist
         if not os.path.exists(csv_local_file_path):
-            raise FileNotFoundError(f"CSV file not found: {csv_local_file_path}")
+            print(f"CSV file not found: {csv_local_file_path}")
+            raise FileNotFoundError(f"Upload file to FTP Server failed because can't find the file to upload.")
         if not os.path.exists(ctrl_local_file_path):
-            raise FileNotFoundError(f"Control file not found: {ctrl_local_file_path}")
+            print(f"Control file not found: {ctrl_local_file_path}")
+            raise FileNotFoundError(f"Upload file to FTP Server failed because can't find the file to upload.")
 
         try:
             # Connect to FTPS
-            ftps_server = '34.124.138.144'
+            ftps_server = '34.124.138.14'
             username = 'airflow'
             password = 'airflow'
             ftps = connect_to_ftps(ftps_server, username, password)
@@ -122,7 +124,8 @@ def upload_csv_ctrl_to_ftp_server(default_emails: Dict[str, List[str]],
                     pass  # Ignore errors during quit
 
         except Exception as e:
-            raise AirflowException(f"FTPS connection error: {str(e)}")
+            print(f"FTPS connection error: {str(e)}")
+            raise AirflowException(f"Upload file to FTP Server failed because failed to connect to FTP Server.")
 
     except Exception as e:
         error_msg = str(e)
