@@ -161,8 +161,8 @@ def format_success_message(dag_id: str, run_id: str, current_time: datetime,
         <h3>Output Information:</h3>
         <ul>
             <li>Path: {ftp_path}</li>
-            <li>CSV Filename: {csv_filename}.csv</li>
-            <li>Control Filename: {csv_filename}.ctrl</li>
+            <li>CSV Filename: {csv_filename}</li>
+            <li>Control Filename: {control_filename}</li>
         </ul>
         
         {ftp_config}
@@ -590,8 +590,8 @@ def send_success_notification(default_emails, slack_webhook=None, **context):
     if isinstance(process_result, tuple) and len(process_result) == 4:
         _, csv_filename, _, control_filename = process_result
     else:
-        csv_filename = ti.xcom_pull(key='output_filename')
-        control_filename = ti.xcom_pull(key='control_filename')
+        csv_filename = ti.xcom_pull(dag_id=dag_id, key='output_filename')
+        control_filename = ti.xcom_pull(dag_id=dag_id, key='control_filename')
     
     batch_state = get_batch_state(dag_id, run_id)
 
