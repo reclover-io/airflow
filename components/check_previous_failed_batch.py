@@ -17,12 +17,6 @@ def check_previous_failed_batch(**context):
     dag_id = dag_run.dag_id
     conf = dag_run.conf or {}
 
-    check_fail = conf.get('check_fail', True)  # Default to True if not specified
-    if not check_fail:
-        print("Skipping check_previous_fails as configured (check_fail: false)")
-        raise AirflowSkipException("Skipping failed batch check as configured")
-
-    # Wait for start_run if specified
     start_run = conf.get('start_run')
     if start_run:
         start_time = datetime.strptime(start_run, '%Y-%m-%d %H:%M:%S.%f')
@@ -33,6 +27,11 @@ def check_previous_failed_batch(**context):
             wait_time = (start_time - current_time).total_seconds()
             print(f"Waiting {wait_time} seconds until start time: {start_run}")
             time.sleep(wait_time)
+
+    check_fail = conf.get('check_fail', True)  # Default to True if not specified
+    if not check_fail:
+        print("Skipping check_previous_fails as configured (check_fail: false)")
+        raise AirflowSkipException("Skipping failed batch check as configured")
     
     # Get failed batches based on config or all failed runs
     print("\nChecking for failed batches...")
