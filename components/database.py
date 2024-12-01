@@ -13,7 +13,9 @@ def save_batch_state(batch_id: str, run_id: str, start_date: str, end_date: str,
                     total_records: Optional[int] = None,
                     fetched_records: Optional[int] = None,
                     target_pause_time: Optional[str] = None,
-                    initial_start_time: Optional[datetime] = None):
+                    initial_start_time: Optional[datetime] = None,
+                    csv_filename: Optional[str] = None,  # เพิ่ม parameter
+                    ctrl_filename: Optional[str] = None):
     """Save batch state to database"""
     try:
         with get_db_connection() as conn:
@@ -26,12 +28,12 @@ def save_batch_state(batch_id: str, run_id: str, start_date: str, end_date: str,
             
             query = text("""
                 INSERT INTO batch_states (
-                    batch_id, run_id, start_date, end_date, current_page, 
+                    batch_id, run_id, start_date, end_date, csv_filename , ctrl_filename , current_page, 
                     last_search_after, status, error_message, 
                     total_records, fetched_records, updated_at,
                     target_pause_time, initial_start_time
                 ) VALUES (
-                    :batch_id, :run_id, :start_date, :end_date, :current_page, 
+                    :batch_id, :run_id, :start_date, :end_date, :csv_filename , :ctrl_filename , :current_page, 
                     :last_search_after, :status, :error_message,
                     :total_records, :fetched_records, 
                     timezone('Asia/Bangkok', NOW()),
@@ -39,6 +41,8 @@ def save_batch_state(batch_id: str, run_id: str, start_date: str, end_date: str,
                 )
                 ON CONFLICT (batch_id, run_id) 
                 DO UPDATE SET 
+                    csv_filename = EXCLUDED.csv_filename,
+                    ctrl_filename = EXCLUDED.ctrl_filename,
                     current_page = EXCLUDED.current_page,
                     last_search_after = EXCLUDED.last_search_after,
                     status = EXCLUDED.status,
@@ -57,6 +61,8 @@ def save_batch_state(batch_id: str, run_id: str, start_date: str, end_date: str,
                 'run_id': str(run_id),
                 'start_date': start_date,
                 'end_date': end_date,
+                'csv_filename': csv_filename,
+                'ctrl_filename': ctrl_filename,
                 'current_page': int(current_page) if current_page is not None else 1,
                 'last_search_after': last_search_after_json,
                 'status': str(status),
@@ -77,7 +83,7 @@ def get_batch_state(batch_id: str, run_id: str) -> Optional[Dict]:
         query = text("""
             SELECT start_date, end_date, current_page, last_search_after,
                    status, error_message, total_records, fetched_records,
-                   run_id, updated_at, target_pause_time
+                   run_id, updated_at, target_pause_time, csv_filename, ctrl_filename
             FROM batch_states
             WHERE batch_id = :batch_id 
             AND run_id = :run_id
@@ -117,7 +123,9 @@ def get_batch_state(batch_id: str, run_id: str) -> Optional[Dict]:
             'fetched_records': result[7],
             'run_id': result[8],
             'updated_at': result[9],
-            'target_pause_time': result[10]  # เพิ่ม target_pause_time
+            'target_pause_time': result[10],
+            'csv_filename': result[11],  
+            'ctrl_filename': result[12]
         }
 
 def get_initial_start_time(batch_id: str, run_id: str) -> Optional[datetime]:
@@ -160,15 +168,9 @@ def get_failed_batch_runs(dag_id: str) -> List[Dict]:
             SELECT d.run_id, 
                    d.dag_id, 
                    d.execution_date, 
-                   d.start_date,
-                   d.end_date,
-                   b.status,
-                   b.error_message,
-                   b.created_at,
-                   b.updated_at
+                   b.status
             FROM dag_run d
             JOIN batch_states b ON d.run_id = b.run_id
-            WHERE d.dag_id = :dag_id
             AND b.status = 'FAILED'
             ORDER BY d.execution_date ASC
         """)
@@ -195,8 +197,6 @@ def get_failed_batch_runs(dag_id: str) -> List[Dict]:
                     'run_id': row['run_id'],
                     'dag_id': row['dag_id'],
                     'execution_date': row['execution_date'],
-                    'start_date': row['start_date'],
-                    'end_date': row['end_date'],
                     'status': row['status']
                 })
             

@@ -14,6 +14,7 @@ def check_previous_failed_batch(**context):
     import time
     
     dag_run = context['dag_run']
+    current_run_id = dag_run.run_id
     dag_id = dag_run.dag_id
     conf = dag_run.conf or {}
 
@@ -32,6 +33,10 @@ def check_previous_failed_batch(**context):
     if not check_fail:
         print("Skipping check_previous_fails as configured (check_fail: false)")
         raise AirflowSkipException("Skipping failed batch check as configured")
+    
+    # ดึง failed batches ที่มี task uploadtoFTP หรือ process_data เป็น failed
+    failed_batches = get_failed_batch_runs(dag_id)
+    has_failed_batches = bool(failed_batches)
     
     # Get failed batches based on config or all failed runs
     print("\nChecking for failed batches...")
@@ -71,61 +76,29 @@ def check_previous_failed_batch(**context):
                     if old_dag_run:
                         print(f"\nResetting tasks for DAG run: {run_id}")
                         
-                        # Reset all task instances
+                        # Reset only necessary task instances
                         task_instances = session.query(TaskInstance).filter(
                             TaskInstance.dag_id == dag_id,
-                            TaskInstance.run_id == run_id
+                            TaskInstance.run_id == run_id,
+                            TaskInstance.task_id != 'check_previous_failed_batch'  # ไม่ reset task นี้
                         ).all()
                         
                         for ti in task_instances:
-                            if ti.task_id == 'check_previous_failed_batch':
-                                ti.state = State.SUCCESS
-                            elif ti.task_id == 'validate_input':
-                                ti.state = State.NONE
-                            else:
-                                ti.state = State.NONE
+                            ti.state = State.NONE
                             
-                            # Clear XCom data except for check_previous_failed_batch
-                            if ti.task_id != 'check_previous_failed_batch':
-                                session.query(XCom).filter(
-                                    XCom.dag_id == dag_id,
-                                    XCom.task_id == ti.task_id,
-                                    XCom.run_id == run_id
-                                ).delete()
+                            # Clear XCom data for reset tasks
+                            session.query(XCom).filter(
+                                XCom.dag_id == dag_id,
+                                XCom.task_id == ti.task_id,
+                                XCom.run_id == run_id
+                            ).delete()
                         
                         # Reset DAG run state
                         old_dag_run.state = State.QUEUED
                         session.commit()
                         print(f"Reset complete for DAG run: {run_id}")
                         
-                        # Wait for this batch to complete before proceeding to next
-                        max_wait_time = 3600  # 1 hour
-                        start_wait_time = time.time()
                         
-                        print(f"\nWaiting for batch {run_id} to complete...")
-                        while True:
-                            if time.time() - start_wait_time > max_wait_time:
-                                raise AirflowException(
-                                    f"Timeout waiting for batch {run_id} to complete"
-                                )
-                            
-                            session.refresh(old_dag_run)
-                            current_state = old_dag_run.state
-                            batch_state = get_batch_state(dag_id, run_id)
-                            
-                            print(f"Current state - DAG: {current_state}, "
-                                  f"Batch: {batch_state['status'] if batch_state else 'Unknown'}")
-                            
-                            if current_state in ['success', 'failed']:
-                                if current_state == 'failed' or (batch_state and batch_state['status'] == 'FAILED'):
-                                    error_msg = batch_state.get('error_message') if batch_state else "Unknown error"
-                                    raise AirflowException(
-                                        f"Failed to resume batch {run_id}. Error: {error_msg}"
-                                    )
-                                print(f"Batch {run_id} completed successfully")
-                                break
-                            
-                            time.sleep(10)
                     else:
                         print(f"Warning: Could not find DAG run for run_id: {run_id}")
                 
@@ -139,3 +112,48 @@ def check_previous_failed_batch(**context):
         print("\nAll failed batches have been processed successfully")
     else:
         print("No failed batches found, proceeding with current batch")
+
+    if has_failed_batches:
+        try:
+            with create_session() as session:
+                current_dag_run = session.query(DagRun).filter(
+                    DagRun.dag_id == dag_id,
+                    DagRun.run_id == current_run_id
+                ).first()
+                
+                if current_dag_run:
+                    print(f"\nResetting current DAG run: {current_run_id}")
+                    
+                    # Reset all task instances (รวมถึง check_previous_failed_batch)
+                    current_task_instances = session.query(TaskInstance).filter(
+                        TaskInstance.dag_id == dag_id,
+                        TaskInstance.run_id == current_run_id
+                    ).all()
+                    
+                    for ti in current_task_instances:
+                        ti.state = State.NONE
+                        
+                        # Clear XCom data
+                        session.query(XCom).filter(
+                            XCom.dag_id == dag_id,
+                            XCom.task_id == ti.task_id,
+                            XCom.run_id == current_run_id
+                        ).delete()
+                    
+                    # Set current DAG run state to QUEUED
+                    current_dag_run.state = State.QUEUED
+                    session.commit()
+                    print(f"Reset complete for current DAG run")
+                    print("Current DAG will be requeued to maintain execution order")
+                    
+                    # ใช้ AirflowSkipException เพื่อหยุดการทำงานของ DAG ปัจจุบัน
+                    raise AirflowSkipException("Skipping current DAG to maintain execution order")
+                    
+        except AirflowSkipException:
+            # ส่งต่อ AirflowSkipException เพื่อหยุดการทำงาน
+            raise
+        except Exception as e:
+            print(f"Error resetting current DAG run: {str(e)}")
+            raise AirflowException(f"Failed to reset current DAG run: {str(e)}")
+
+    return True
