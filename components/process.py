@@ -8,7 +8,7 @@ from contextlib import contextmanager
 
 from components.database import (
     get_batch_state, 
-    save_batch_state,
+    save_batch_state
 )
 from components.api import fetch_data_page
 from components.file_handlers import (
@@ -72,6 +72,8 @@ def handle_termination(batch_id: str, run_id: str, start_date: str, end_date: st
                 run_id=run_id,
                 start_date=start_date,
                 end_date=end_date,
+                csv_filename=None,
+                ctrl_filename=None,
                 current_page=page,
                 last_search_after=search_after,
                 status='FAILED',
@@ -146,13 +148,15 @@ def handle_pause(conf: Dict, state_status: Optional[str], dag_id: str, run_id: s
             'start_date': batch_state['start_date'] if batch_state else conf.get('startDate'),
             'end_date': batch_state['end_date'] if batch_state else conf.get('endDate')
         }
-        
+
         # บันทึก target_pause_time ลง state
         save_batch_state(
             batch_id=dag_id,
             run_id=run_id,
             start_date=current_state['start_date'],
             end_date=current_state['end_date'],
+            csv_filename=None,
+            ctrl_filename=None,
             current_page=current_state['current_page'],
             last_search_after=current_state['last_search_after'],
             status='RUNNING',
@@ -245,7 +249,6 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     
     try:
-        
         csv_columns = get_csv_columns(conf, DEFAULT_CSV_COLUMNS)
         print(f"Using CSV columns: {csv_columns}")
     except AirflowException as e:
@@ -259,6 +262,8 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
     
     thai_timestamp = get_thai_time().strftime('%Y-%m-%d_%H.%M.%S')
     temp_file_path = os.path.join(TEMP_DIR, f"temp_{dag_id}_{run_id}.csv")
+    temp_csv_filename = f"temp_{dag_id}_{run_id}.csv"
+    temp_ctrl_filename = f"temp_{dag_id}_{run_id}.ctrl"
     
     should_write_header = True
     
@@ -313,6 +318,8 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
                 run_id=run_id,
                 start_date=start_date,
                 end_date=end_date,
+                csv_filename=temp_csv_filename,
+                ctrl_filename=temp_ctrl_filename,
                 current_page=page,
                 last_search_after=search_after,
                 status='PAUSED',
@@ -325,12 +332,15 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
             if os.path.exists(temp_file_path):
                 print(f"Keeping temp file for continuation: {temp_file_path}")
             return {'status': 'paused', 'message': msg}
-        
+
+
         save_batch_state(
             batch_id=dag_id,
             run_id=run_id,
             start_date=start_date,
             end_date=end_date,
+            csv_filename=temp_csv_filename,
+            ctrl_filename=temp_ctrl_filename,
             current_page=page,
             last_search_after=search_after,
             status='RUNNING',
@@ -358,6 +368,8 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
                         run_id=run_id,
                         start_date=start_date,
                         end_date=end_date,
+                        csv_filename=temp_csv_filename,
+                        ctrl_filename=temp_ctrl_filename,
                         current_page=page,
                         last_search_after=search_after,
                         status='PAUSED',
@@ -379,6 +391,8 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
                         run_id=run_id,
                         start_date=start_date,
                         end_date=end_date,
+                        csv_filename=temp_csv_filename,
+                        ctrl_filename=temp_ctrl_filename,
                         current_page=page,
                         last_search_after=search_after,
                         status='FAILED',
@@ -395,6 +409,8 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
                         run_id=run_id,
                         start_date=start_date,
                         end_date=end_date,
+                        csv_filename=temp_csv_filename,
+                        ctrl_filename=temp_ctrl_filename,
                         current_page=page,
                         last_search_after=search_after,
                         status='PAUSED',
@@ -435,6 +451,8 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
                         run_id=run_id,
                         start_date=start_date,
                         end_date=end_date,
+                        csv_filename=temp_csv_filename,
+                        ctrl_filename=temp_ctrl_filename,
                         current_page=page,
                         last_search_after=next_search_after,
                         status='RUNNING',
@@ -460,29 +478,33 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
         thai_time = get_thai_time()
         final_filename = get_formatted_filename(filename_template, dag_id, thai_time)
         final_filename_csv = final_filename + '.csv'
+        final_filename_ctrl = final_filename + '.ctrl'
 
         final_path = os.path.join(output_path, final_filename_csv)
 
         # ถ้า directory ไม่มี ให้สร้างใหม่
         os.makedirs(os.path.dirname(final_path), exist_ok=True)
-
         
         shutil.move(temp_file_path, final_path)
         print(f"Moved temp file to: {final_path}")
-        
+
         save_batch_state(
             batch_id=dag_id,
             run_id=run_id,
             start_date=start_date,
             end_date=end_date,
+            csv_filename=final_filename_csv,
+            ctrl_filename=final_filename_ctrl,
             current_page=page,
             last_search_after=search_after,
             status='COMPLETED',
             error_message=None,
             total_records=total_records,
-            fetched_records=fetched_count
+            fetched_records=fetched_count,
+            target_pause_time = None,
+            initial_start_time  = None
         )
-        
+
         return final_path, final_filename
         
     except Exception as e:
@@ -496,6 +518,8 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
             run_id=run_id,
             start_date=start_date,
             end_date=end_date,
+            csv_filename=temp_csv_filename,
+            ctrl_filename=temp_ctrl_filename,
             current_page=page,
             last_search_after=search_after,
             status='FAILED',

@@ -7,7 +7,7 @@ from components.constants import THAI_TZ
 from components.utils import get_thai_time
 from components.create_database import get_db_connection 
 
-def save_batch_state(batch_id: str, run_id: str, start_date: str, end_date: str, 
+def save_batch_state(batch_id: str, run_id: str, start_date: str, end_date: str, csv_filename: str, ctrl_filename: str ,
                     current_page: int, last_search_after: Optional[List[str]], 
                     status: str, error_message: Optional[str] = None,
                     total_records: Optional[int] = None,
@@ -16,6 +16,8 @@ def save_batch_state(batch_id: str, run_id: str, start_date: str, end_date: str,
                     initial_start_time: Optional[datetime] = None):
     """Save batch state to database"""
     try:
+        print(f"/////Batch ID: {batch_id}, Run ID: {run_id}, Start Date: {start_date}, CSV File: {csv_filename}, ctrl_filename: {ctrl_filename}///////--**")
+
         with get_db_connection() as conn:
             # ตรวจสอบว่ามี state เดิมหรือไม่
             existing_state = get_batch_state(batch_id, run_id)
@@ -26,12 +28,12 @@ def save_batch_state(batch_id: str, run_id: str, start_date: str, end_date: str,
             
             query = text("""
                 INSERT INTO batch_states (
-                    batch_id, run_id, start_date, end_date, current_page, 
+                    batch_id, run_id, start_date, end_date, csv_filename , ctrl_filename , current_page, 
                     last_search_after, status, error_message, 
                     total_records, fetched_records, updated_at,
                     target_pause_time, initial_start_time
                 ) VALUES (
-                    :batch_id, :run_id, :start_date, :end_date, :current_page, 
+                    :batch_id, :run_id, :start_date, :end_date, :csv_filename , :ctrl_filename , :current_page, 
                     :last_search_after, :status, :error_message,
                     :total_records, :fetched_records, 
                     timezone('Asia/Bangkok', NOW()),
@@ -39,6 +41,8 @@ def save_batch_state(batch_id: str, run_id: str, start_date: str, end_date: str,
                 )
                 ON CONFLICT (batch_id, run_id) 
                 DO UPDATE SET 
+                    csv_filename = EXCLUDED.csv_filename,
+                    ctrl_filename = EXCLUDED.ctrl_filename,
                     current_page = EXCLUDED.current_page,
                     last_search_after = EXCLUDED.last_search_after,
                     status = EXCLUDED.status,
@@ -49,7 +53,7 @@ def save_batch_state(batch_id: str, run_id: str, start_date: str, end_date: str,
                     initial_start_time = COALESCE(batch_states.initial_start_time, EXCLUDED.initial_start_time),
                     updated_at = timezone('Asia/Bangkok', NOW())
             """)
-            
+        
             last_search_after_json = json.dumps(last_search_after) if last_search_after else None
             
             conn.execute(query, {
@@ -57,6 +61,8 @@ def save_batch_state(batch_id: str, run_id: str, start_date: str, end_date: str,
                 'run_id': str(run_id),
                 'start_date': start_date,
                 'end_date': end_date,
+                'csv_filename': csv_filename,
+                'ctrl_filename': ctrl_filename,
                 'current_page': int(current_page) if current_page is not None else 1,
                 'last_search_after': last_search_after_json,
                 'status': str(status),
