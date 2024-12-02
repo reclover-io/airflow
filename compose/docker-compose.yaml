@@ -202,6 +202,7 @@ services:
           echo "    See: https://airflow.apache.org/docs/apache-airflow/stable/howto/docker-compose/index.html#setting-the-right-airflow-user"
           echo
         fi
+        pip install requests       
         one_meg=1048576
         mem_available=$$(($$(getconf _PHYS_PAGES) * $$(getconf PAGE_SIZE) / one_meg))
         cpus_available=$$(grep -cE 'cpu[0-9]+' /proc/stat)
