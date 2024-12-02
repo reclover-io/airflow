@@ -101,9 +101,10 @@ def get_formatted_filename(template: str, dag_id: str, timestamp: datetime) -> s
         filename = re.sub(pattern, replace_match, template)
         
         filename = filename.replace('{dag_id}', dag_id)
+        filename += "_"+timestamp.strftime('%Y%m%d%H%M%S')
         # ถ้าไม่มีนามสกุลไฟล์ ให้เพิ่ม .csv
-        if not filename.endswith('.csv'):
-            filename += '.csv'
+        # if not filename.endswith('.csv'):
+        #     filename += '.csv'
         
         # ตรวจสอบชื่อไฟล์ที่ได้
         if not filename:
