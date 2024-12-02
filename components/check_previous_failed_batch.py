@@ -10,6 +10,7 @@ def check_previous_failed_batch(**context):
     from airflow.models import DagRun, TaskInstance, DagBag, XCom
     from airflow.utils.state import State
     from airflow.utils.session import create_session
+    from airflow.api.common.experimental.mark_tasks import set_state
     import pendulum
     import time
     
@@ -18,16 +19,16 @@ def check_previous_failed_batch(**context):
     dag_id = dag_run.dag_id
     conf = dag_run.conf or {}
 
-    start_run = conf.get('start_run')
-    if start_run:
-        start_time = datetime.strptime(start_run, '%Y-%m-%d %H:%M:%S.%f')
-        start_time = THAI_TZ.localize(start_time)
-        current_time = get_thai_time()
+    # start_run = conf.get('start_run')
+    # if start_run:
+    #     start_time = datetime.strptime(start_run, '%Y-%m-%d %H:%M:%S.%f')
+    #     start_time = THAI_TZ.localize(start_time)
+    #     current_time = get_thai_time()
         
-        if current_time < start_time:
-            wait_time = (start_time - current_time).total_seconds()
-            print(f"Waiting {wait_time} seconds until start time: {start_run}")
-            time.sleep(wait_time)
+    #     if current_time < start_time:
+    #         wait_time = (start_time - current_time).total_seconds()
+    #         print(f"Waiting {wait_time} seconds until start time: {start_run}")
+    #         time.sleep(wait_time)
 
     check_fail = conf.get('check_fail', True)  # Default to True if not specified
     if not check_fail:
@@ -97,6 +98,7 @@ def check_previous_failed_batch(**context):
                         old_dag_run.state = State.QUEUED
                         session.commit()
                         print(f"Reset complete for DAG run: {run_id}")
+                        time.sleep(0.5)
                         
                         
                     else:

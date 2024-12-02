@@ -83,150 +83,6 @@ def handle_termination(batch_id: str, run_id: str, start_date: str, end_date: st
             )
             raise AirflowException(error_msg)
 
-# State handling functions
-def handle_pause(conf: Dict, state_status: Optional[str], dag_id: str, run_id: str) -> bool:
-    """
-    Handle batch pause if pause time is specified
-    Returns True if should pause, False otherwise
-    """
-    pause_time = conf.get('pause')
-    if not pause_time:
-        print("No pause time specified")
-        return False
-    
-    print(f"Checking pause time: {pause_time}")
-    
-    # ดึงข้อมูลจาก Database
-    batch_state = get_batch_state(dag_id, run_id)
-    current_datetime = datetime.now(THAI_TZ)
-    
-    # แยกส่วนของเวลา pause
-    time_parts = pause_time.split(':')
-    pause_hour = int(time_parts[0])
-    pause_minute = int(time_parts[1])
-    seconds_parts = time_parts[2].split('.')
-    pause_second = int(seconds_parts[0])
-    pause_millisecond = int(seconds_parts[1]) if len(seconds_parts) > 1 else 0
-    
-    # สร้าง datetime object สำหรับเวลา pause วันนี้
-    pause_today = current_datetime.replace(
-        hour=pause_hour,
-        minute=pause_minute,
-        second=pause_second,
-        microsecond=pause_millisecond * 1000
-    )
-    
-    # สร้าง datetime object สำหรับเวลา pause พรุ่งนี้
-    pause_tomorrow = pause_today + timedelta(days=1)
-    
-    print(f"Current time: {current_datetime.strftime('%Y-%m-%d %H:%M:%S.%f')}")
-    print(f"Today's pause time: {pause_today.strftime('%Y-%m-%d %H:%M:%S.%f')}")
-    
-    # ถ้ามี target_pause_time ใน state ให้ใช้ค่านั้น
-    target_pause_time = None
-    if batch_state and batch_state.get('target_pause_time'):
-        if isinstance(batch_state['target_pause_time'], str):
-            target_pause_time = datetime.fromisoformat(batch_state['target_pause_time'].replace('Z', '+00:00'))
-        else:
-            target_pause_time = batch_state['target_pause_time']
-        print(f"Using stored target pause time: {target_pause_time.strftime('%Y-%m-%d %H:%M:%S.%f')}")
-    else:
-        # กำหนด target_pause_time ครั้งแรก
-        if current_datetime > pause_today:
-            target_pause_time = pause_tomorrow
-            print(f"Setting initial target pause time to tomorrow: {target_pause_time.strftime('%Y-%m-%d %H:%M:%S.%f')}")
-        else:
-            target_pause_time = pause_today
-            print(f"Setting initial target pause time to today: {target_pause_time.strftime('%Y-%m-%d %H:%M:%S.%f')}")
-        
-        # ดึงค่าจาก state หรือใช้ค่าเริ่มต้น
-        current_state = {
-            'current_page': batch_state['current_page'] if batch_state else 1,
-            'last_search_after': batch_state['last_search_after'] if batch_state else None,
-            'total_records': batch_state['total_records'] if batch_state else None,
-            'fetched_records': batch_state['fetched_records'] if batch_state else 0,
-            'start_date': batch_state['start_date'] if batch_state else conf.get('startDate'),
-            'end_date': batch_state['end_date'] if batch_state else conf.get('endDate')
-        }
-        
-        # บันทึก target_pause_time ลง state
-        save_batch_state(
-            batch_id=dag_id,
-            run_id=run_id,
-            start_date=current_state['start_date'],
-            end_date=current_state['end_date'],
-            csv_filename=None,
-            ctrl_filename=None,
-            current_page=current_state['current_page'],
-            last_search_after=current_state['last_search_after'],
-            status='RUNNING',
-            error_message=None,
-            total_records=current_state['total_records'],
-            fetched_records=current_state['fetched_records'],
-            target_pause_time=target_pause_time.isoformat()
-        )
-    
-    # เช็คว่าถึงเวลา pause หรือยัง
-    should_pause = current_datetime >= target_pause_time
-    print(f"Should pause: {should_pause}")
-    
-    return should_pause
-
-def should_pause(pause_time: str, state_status: Optional[str], dag_id: str, run_id: str) -> bool:
-    """
-    Check if batch should pause based on time and state
-    """
-    try:
-        # แยกส่วนของเวลาและแปลงเป็นตัวเลข
-        time_parts = pause_time.split(':')
-        pause_hour = int(time_parts[0])
-        pause_minute = int(time_parts[1])
-        seconds_parts = time_parts[2].split('.')
-        pause_second = int(seconds_parts[0])
-        pause_millisecond = int(seconds_parts[1]) if len(seconds_parts) > 1 else 0
-        
-        # สร้าง datetime object สำหรับเวลา pause
-        pause_datetime = datetime.now(THAI_TZ).replace(
-            hour=pause_hour,
-            minute=pause_minute,
-            second=pause_second,
-            microsecond=pause_millisecond * 1000
-        )
-        
-        # ตรวจสอบ state ใน database
-        batch_state = get_batch_state(dag_id, run_id)
-        current_datetime = datetime.now(THAI_TZ)
-        
-        print(f"Current datetime: {current_datetime.strftime('%Y-%m-%d %H:%M:%S.%f')}")
-        print(f"Pause datetime: {pause_datetime.strftime('%Y-%m-%d %H:%M:%S.%f')}")
-        
-        # กำหนดเวลาที่จะใช้ pause
-        if batch_state and batch_state['status'] == 'PAUSED':
-            # ถ้า resume จาก PAUSED ใช้เวลาพรุ่งนี้
-            target_datetime = pause_datetime + timedelta(days=1)
-            print("Resuming from PAUSED state, using tomorrow's pause time")
-        else:
-            if current_datetime >= pause_datetime:
-                # ถ้าเลยเวลา pause แล้ว ใช้เวลาพรุ่งนี้
-                target_datetime = pause_datetime + timedelta(days=1)
-                print("Current time is after pause time, using tomorrow's pause time")
-            else:
-                # ถ้ายังไม่ถึงเวลา pause ใช้เวลาวันนี้
-                target_datetime = pause_datetime
-                print("Current time is before pause time, using today's pause time")
-        
-        print(f"Target datetime: {target_datetime.strftime('%Y-%m-%d %H:%M:%S.%f')}")
-        
-        # เปรียบเทียบเวลาปัจจุบันกับเวลา pause ที่กำหนด
-        should_pause = current_datetime >= target_datetime
-        print(f"Should pause: {should_pause}")
-        
-        return should_pause
-        
-    except (ValueError, IndexError) as e:
-        print(f"Invalid pause time format: {e}")
-        return False
-
 def is_manual_pause(error_message: Optional[str]) -> bool:
     """
     Check if the error is from manual pause (SIGTERM)
@@ -312,27 +168,6 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
             print(f"Removed existing temp file: {temp_file_path}")
     
     try:
-        # ส่งพารามิเตอร์เพิ่มเติมให้ handle_pause
-        if handle_pause(conf, state_status, dag_id, run_id):
-            save_batch_state(
-                batch_id=dag_id,
-                run_id=run_id,
-                start_date=start_date,
-                end_date=end_date,
-                csv_filename=temp_csv_filename,
-                ctrl_filename=temp_ctrl_filename,
-                current_page=page,
-                last_search_after=search_after,
-                status='PAUSED',
-                error_message=f"Batch paused at {format_thai_time(get_thai_time())}",
-                total_records=total_records,
-                fetched_records=fetched_count
-            )
-            msg = f"Batch paused at {format_thai_time(get_thai_time())} due to configured pause time"
-            print(msg)
-            if os.path.exists(temp_file_path):
-                print(f"Keeping temp file for continuation: {temp_file_path}")
-            return {'status': 'paused', 'message': msg}
         
         save_batch_state(
             batch_id=dag_id,
@@ -360,26 +195,7 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
                 total_records=total_records,
                 fetched_count=fetched_count
             ) as termination:
-                # ตรวจสอบเวลา pause ก่อนดึงข้อมูล
-                if handle_pause(conf, state_status, dag_id, run_id):
-                    print("Pause condition met during processing")
-                    save_batch_state(
-                        batch_id=dag_id,
-                        run_id=run_id,
-                        start_date=start_date,
-                        end_date=end_date,
-                        csv_filename=temp_csv_filename,
-                        ctrl_filename=temp_ctrl_filename,
-                        current_page=page,
-                        last_search_after=search_after,
-                        status='PAUSED',
-                        error_message=None,
-                        total_records=total_records,
-                        fetched_records=fetched_count
-                    )
-                    msg = f"Batch paused at {format_thai_time(get_thai_time())}"
-                    print(msg)
-                    return {'status': 'paused', 'message': msg}
+
                 
                 print(f"\nFetching page {page}...")
                 
@@ -402,27 +218,6 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
                     )
 
                     raise e
-                
-                if handle_pause(conf, state_status, dag_id, run_id):
-                    save_batch_state(
-                        batch_id=dag_id,
-                        run_id=run_id,
-                        start_date=start_date,
-                        end_date=end_date,
-                        csv_filename=temp_csv_filename,
-                        ctrl_filename=temp_ctrl_filename,
-                        current_page=page,
-                        last_search_after=search_after,
-                        status='PAUSED',
-                        error_message=f"Batch paused at {format_thai_time(get_thai_time())}",
-                        total_records=total_records,
-                        fetched_records=fetched_count
-                    )
-                    msg = f"Batch paused at {format_thai_time(get_thai_time())} due to configured pause time"
-                    print(msg)
-                    if os.path.exists(temp_file_path):
-                        print(f"Keeping temp file for continuation: {temp_file_path}")
-                    return {'status': 'paused', 'message': msg}
                 
                 if total_records is None:
                     total_records = total
@@ -571,11 +366,6 @@ def process_data(API_URL: str, TEMP_DIR: str, OUTPUT_DIR: str,CONTROL_DIR: str, 
         ti.xcom_push(key='batch_start_time', value=get_thai_time().isoformat())
         
         try:
-            # Check for pause before starting
-            if handle_pause(conf, None, dag_run.dag_id, run_id):
-                msg = f"Initial pause check at {format_thai_time(get_thai_time())}"
-                print(msg)
-                return {'status': 'paused', 'message': msg}
             
             result = fetch_and_save_data(
                 start_date=start_date,
