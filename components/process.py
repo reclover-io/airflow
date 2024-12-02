@@ -521,6 +521,7 @@ def process_data(API_URL: str, TEMP_DIR: str, OUTPUT_DIR: str,CONTROL_DIR: str, 
         
         # Store start time
         ti.xcom_push(key='batch_start_time', value=get_thai_time().isoformat())
+        ti.xcom_push(key='dag_path', value=OUTPUT_DIR.split('/')[-1])
         
         try:
             # Check for pause before starting

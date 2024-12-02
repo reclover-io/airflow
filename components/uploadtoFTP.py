@@ -66,17 +66,19 @@ def upload_csv_ctrl_to_ftp_server(default_emails: Dict[str, List[str]],
         # Get file names from XCom
         output_filename_csv = ti.xcom_pull(dag_id=dag_id, key='output_filename')
         output_filename_ctrl = ti.xcom_pull(dag_id=dag_id, key='control_filename')
+        dag_path = ti.xcom_pull(dag_id=dag_id,key='dag_path', task_ids='process_data')
+
 
         # Validate file names
         if not output_filename_csv or not output_filename_ctrl:
             raise AirflowException("Missing file names from previous tasks")
 
         # Prepare file paths
-        csv_remote_path = f'/10.250.1.101/ELK/daily/source_data/landing/{dag_id}/{output_filename_csv}'
-        ctrl_remote_path = f'/10.250.1.101/ELK/daily/source_data/landing/{dag_id}/{output_filename_ctrl}'
+        csv_remote_path = f'/10.250.1.101/ELK/daily/source_data/landing/{dag_path}/{output_filename_csv}'
+        ctrl_remote_path = f'/10.250.1.101/ELK/daily/source_data/landing/{dag_path}/{output_filename_ctrl}'
 
-        csv_local_file_path = f'/opt/airflow/data/batch/{dag_id}/{output_filename_csv}'
-        ctrl_local_file_path = f'/opt/airflow/data/batch/{dag_id}/{output_filename_ctrl}'
+        csv_local_file_path = f'/opt/airflow/data/batch/{dag_path}/{output_filename_csv}'
+        ctrl_local_file_path = f'/opt/airflow/data/batch/{dag_path}/{output_filename_ctrl}'
 
         # Verify local files exist
         if not os.path.exists(csv_local_file_path):

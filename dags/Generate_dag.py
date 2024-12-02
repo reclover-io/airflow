@@ -8,15 +8,24 @@ def create_dag_file(**kwargs):
     config = kwargs['dag_run'].conf  # รับค่าคอนฟิกจากการรัน
     api_url = config.get('API_URL', 'http://default.api/url')
     dag_name = config.get('DAG_NAME', 'default_dag_name')
+    dag_path = config.get ('DAG_PATH','default_dag_path')
     csv_columns = config.get('DEFAULT_CSV_COLUMNS', ['col1', 'col2', 'col3'])
     authorization = config.get('AUTHORIZATION', 'default_authorization_token')
-    schedule_interval = config.get('SCHEDULT_INTERVAL','0 0 * * *')
     email = config.get('EMAIL', [])
     emailSuccess = config.get('EMAIL_SUCCESS', [])
     emailFail = config.get('EMAIL_FAIL', [])
     emailPause = config.get('EMAIL_PAUSE', [])
     emailResume = config.get('EMAIL_RESUME', [])
     emailStart = config.get('EMAIL_START', [])
+
+    # Modified schedule_interval handling
+    schedule_interval = config.get('SCHEDULT_INTERVAL', None)
+    
+    # Process schedule_interval for template
+    if isinstance(schedule_interval, str) and schedule_interval.lower() == 'none':
+        schedule_interval_str = 'None'  # Will be rendered without quotes
+    else:
+        schedule_interval_str = f"'{schedule_interval}'"  # Will be rendered with quotes
 
     # Template ของ DAG ใหม่ที่เหมือนกับ Friend_MB_Noti_Spending.py
     dag_content = f"""
@@ -43,6 +52,7 @@ start_date = (datetime.now(local_tz) - timedelta(days=1))
 
 API_URL = "{api_url}"
 DAG_NAME = '{dag_name}'
+DAG_PATH = '{dag_path}'
 
 # API Configuration
 API_HEADERS = {{
@@ -51,9 +61,9 @@ API_HEADERS = {{
 }}
 
 # Output Configuration
-OUTPUT_DIR = f'/opt/airflow/data/batch/{{DAG_NAME}}'
+OUTPUT_DIR = f'/opt/airflow/data/batch/{{DAG_PATH}}'
 TEMP_DIR = f'/opt/airflow/data/batch/temp'
-CONTROL_DIR = f'/opt/airflow/data/batch/{{DAG_NAME}}'
+CONTROL_DIR = f'/opt/airflow/data/batch/{{DAG_PATH}}'
 slack_webhook = ""
 
 default_emails = {{
@@ -82,7 +92,7 @@ with DAG(
     DAG_NAME,
     default_args=default_args,
     description='Fetch API data with date range and save to CSV',
-    schedule_interval="{schedule_interval}",
+    schedule_interval={schedule_interval_str},
     start_date=start_date,
     catchup=False,
     tags=['api', 'csv', 'backup']
