@@ -34,12 +34,8 @@ TEMP_DIR = f'/opt/airflow/data/batch/temp'
 CONTROL_DIR = f'/opt/airflow/data/batch/{DAG_NAME}'
 slack_webhook = ""
 
-DEFAULT_CSV_COLUMNS = [
-    'RequestID', 'Path', 'UserToken', 'RequestDateTime', '_id' , 'Status', 'CounterCode', 'Test'
-]
-
 default_emails = {
-    'email': ['asdfasdfasdfdssadfsd@dasfasdfasdf.com'],
+    'email': [],
     'emailSuccess': [],
     'emailFail': [],
     'emailPause': [],
@@ -59,20 +55,11 @@ default_args = {
     'retry_delay': timedelta(seconds=1)
 }
 
-def process_data2(API_URL: str, TEMP_DIR: str, OUTPUT_DIR: str,CONTROL_DIR: str, API_HEADERS: Dict[str, str], DEFAULT_CSV_COLUMNS: List[str], default_emails: Dict[str, List[str]], slack_webhook: Optional[str] = None, **kwargs):
-    """Process the data and handle notifications""" 
-    print("Processing data")
-
-def send_success_notification2(default_emails, slack_webhook=None, **context):
-    """Send success notification"""
-    print("Sending success notification")
-    
-    
 class WaitUntilTimeSensor(BaseSensorOperator):
     """
     Custom sensor to wait until a specific datetime.
     """
-    
+
     def poke(self, context):
         dag_run_conf = context.get("dag_run").conf
 
@@ -81,10 +68,10 @@ class WaitUntilTimeSensor(BaseSensorOperator):
             target_time = datetime.fromisoformat(dag_run_conf.get("start_run"))
             bangkok_tz = pytz.timezone('Asia/Bangkok')
             target_time = bangkok_tz.localize(target_time)
-        
+
             # Get the current time in Bangkok timezone
             now = datetime.now(bangkok_tz)
-            
+
             self.log.info(f"Waiting until {target_time}, current time is {now}")
             return now >= target_time
         else:
@@ -95,7 +82,7 @@ class WaitUntilTimeSensor(BaseSensorOperator):
 with DAG(
     DAG_NAME,
     default_args=default_args,
-    description='Fetch API data with date range and save to CSV',
+    description='Fetch API data with date range and save to CSVSSSS',
     #schedule_interval="0 0 * * *",
     schedule_interval=None,
     start_date=datetime(2024, 11, 25),
@@ -103,27 +90,76 @@ with DAG(
     tags=['api', 'csv', 'backup']
 ) as dag:
     
+    check_previous_fails = PythonOperator(
+        task_id='check_previous_failed_batch',
+        python_callable=check_previous_failed_batch,
+        provide_context=True,
+        trigger_rule=TriggerRule.ALL_SUCCESS
+    )
+    
+    validate_input = PythonOperator(
+        task_id='validate_input',
+        python_callable=validate_input_task,
+        provide_context=True,
+        retries=1,
+        op_args=[DEFAULT_CSV_COLUMNS, default_emails]
+    )
+
     wait_for_start_time = WaitUntilTimeSensor(
         task_id="wait_for_start_time",
         poke_interval=60,  # Check every 30 seconds
         mode="reschedule",  # Release worker slot between checks
+        trigger_rule=TriggerRule.ALL_SUCCESS
     )
     
-    process_task2 = PythonOperator(
-        task_id='process_data2',
-        python_callable=process_data2,
+    running_notification = PythonOperator(
+        task_id='send_running_notification',
+        python_callable=send_running_notification,
+        provide_context=True,
+        op_args=[default_emails, slack_webhook],
+        trigger_rule=TriggerRule.NONE_FAILED_OR_SKIPPED
+    )
+    
+    process_task = PythonOperator(
+        task_id='process_data',
+        python_callable=process_data,
         provide_context=True,
         retries=3,
         op_args=[API_URL,TEMP_DIR,OUTPUT_DIR,CONTROL_DIR,API_HEADERS,DEFAULT_CSV_COLUMNS, default_emails, slack_webhook],
         trigger_rule=TriggerRule.ALL_SUCCESS
     )
     
-    success_notification2 = PythonOperator(
+    success_notification = PythonOperator(
         task_id='send_success_notification',
-        python_callable=send_success_notification2,
+        python_callable=send_success_notification,
         provide_context=True,
         op_args=[default_emails, slack_webhook],
         trigger_rule=TriggerRule.NONE_FAILED_OR_SKIPPED
     )
     
-    process_task2 >> wait_for_start_time >> success_notification2
+    failure_notification = PythonOperator(
+        task_id='send_failure_notification',
+        python_callable=send_failure_notification,
+        provide_context=True,
+        op_args=[default_emails, slack_webhook],
+        trigger_rule=TriggerRule.ONE_FAILED
+    )
+
+    uploadtoFTP = PythonOperator(
+        task_id='uploadtoFTP',
+        python_callable=upload_csv_ctrl_to_ftp_server,
+        provide_context=True,
+        op_args=[default_emails, slack_webhook],
+        trigger_rule=TriggerRule.ALL_SUCCESS,
+        retries=3
+        
+    )
+    
+    # Define Dependencies
+    # check_previous_fails >> validate_input >> [running_notification, failure_notification]
+
+    validate_input >> [running_notification, failure_notification]
+    validate_input >> wait_for_start_time >> check_previous_fails >> [running_notification, failure_notification]
+    running_notification >> process_task >> [uploadtoFTP, failure_notification]
+    uploadtoFTP >> [success_notification, failure_notification]
+    process_task >> success_notification

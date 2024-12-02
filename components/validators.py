@@ -336,26 +336,22 @@ def validate_start_run(start_run: Optional[str]) -> Tuple[bool, Optional[str]]:
     except Exception as e:
         return False, f"Error validating start_run: {str(e)}"
     
-def validate_run_ids(run_ids: List[str], dag_id: str) -> Tuple[bool, Optional[str]]:
+def validate_run_ids(run_id: str, dag_id: str) -> Tuple[bool, Optional[str]]:
     """Validate run_ids exist and are in failed state"""
-    if not run_ids:
+    if not run_id:
         return True, None
-
-    if not isinstance(run_ids, list):
-        return False, "run_ids must be a list"
 
     with create_session() as session:
         errors = []
-        for run_id in run_ids:
-            dag_run = session.query(DagRun).filter(
-                DagRun.dag_id == dag_id,
-                DagRun.run_id == run_id
-            ).first()
+        dag_run = session.query(DagRun).filter(
+            DagRun.dag_id == dag_id,
+            DagRun.run_id == run_id
+        ).first()
 
-            if not dag_run:
-                errors.append(f"Run ID not found: {run_id}")
-            elif dag_run.state != 'failed':
-                errors.append(f"Run ID {run_id} is in {dag_run.state} state. Only failed runs can be resumed.")
+        if not dag_run:
+            errors.append(f"Run ID not found: {run_id}")
+        elif dag_run.state != 'failed':
+            errors.append(f"Run ID {run_id} is in {dag_run.state} state. Only failed runs can be resumed.")
 
         if errors:
             return False, "\n".join(errors)
