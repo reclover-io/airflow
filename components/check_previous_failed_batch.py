@@ -40,7 +40,8 @@ def check_previous_failed_batch(**context):
                         (TaskInstance.task_id == 'send_failure_notification'),
                         (TaskInstance.task_id == 'process_data') & (TaskInstance.state == 'failed'),
                         (TaskInstance.task_id == 'check_previous_failed_batch') & (TaskInstance.state == 'failed'),
-                        (TaskInstance.task_id == 'uploadtoFTP') & (TaskInstance.state == 'failed' | TaskInstance.state == 'upstream_failed')
+                        (TaskInstance.task_id == 'uploadtoFTP') & (TaskInstance.state == 'failed'),
+                        (TaskInstance.task_id == 'uploadtoFTP') & (TaskInstance.state == 'upstream_failed')
                     )
                 ).order_by(TaskInstance.updated_at.asc()).all()
 
