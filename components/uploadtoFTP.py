@@ -89,7 +89,7 @@ def upload_csv_ctrl_to_ftp_server(default_emails: Dict[str, List[str]],
         # Run lftp to upload files
         print(f"Starting upload of {csv_local_file_path} and {ctrl_local_file_path}...")
         run_lftp(
-            host='192.168.1.153',
+            host='34.124.138.144',
             username='airflow',
             password='airflow',
             local_file=csv_local_file_path,

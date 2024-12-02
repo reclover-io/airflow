@@ -82,7 +82,7 @@ class WaitUntilTimeSensor(BaseSensorOperator):
 with DAG(
     DAG_NAME,
     default_args=default_args,
-    description='Fetch API data with date range and save to CSVSSSS',
+    description='Fetch API data with date range and save to CSV',
     #schedule_interval="0 0 * * *",
     schedule_interval=None,
     start_date=datetime(2024, 11, 25),
@@ -126,7 +126,7 @@ with DAG(
         provide_context=True,
         retries=3,
         op_args=[API_URL,TEMP_DIR,OUTPUT_DIR,CONTROL_DIR,API_HEADERS,DEFAULT_CSV_COLUMNS, default_emails, slack_webhook],
-        trigger_rule=TriggerRule.ALL_SUCCESS
+        trigger_rule=TriggerRule.ONE_SUCCESS
     )
     
     success_notification = PythonOperator(
@@ -150,8 +150,7 @@ with DAG(
         python_callable=upload_csv_ctrl_to_ftp_server,
         provide_context=True,
         op_args=[default_emails, slack_webhook],
-        trigger_rule=TriggerRule.ALL_SUCCESS,
-        retries=3
+        trigger_rule=TriggerRule.ALL_SUCCESS
         
     )
     
@@ -159,7 +158,7 @@ with DAG(
     # check_previous_fails >> validate_input >> [running_notification, failure_notification]
 
     validate_input >> [running_notification, failure_notification]
-    validate_input >> wait_for_start_time >> check_previous_fails >> [running_notification, failure_notification]
-    running_notification >> process_task >> [uploadtoFTP, failure_notification]
+    validate_input >> wait_for_start_time >> check_previous_fails >> [running_notification, process_task, failure_notification]
+    process_task >> [uploadtoFTP, failure_notification]
     uploadtoFTP >> [success_notification, failure_notification]
     process_task >> success_notification
