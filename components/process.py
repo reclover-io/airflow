@@ -118,7 +118,7 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
     print(f"Current batch state: {state_status}")
     
     thai_timestamp = get_thai_time().strftime('%Y-%m-%d_%H.%M.%S')
-    temp_file_path = os.path.join(TEMP_DIR, f"temp_{dag_id}_{run_id}.csv")
+    temp_file_path = os.path.join(TEMP_DIR, f"temp_{dag_id}_{run_id}")
     temp_csv_filename = f"temp_{dag_id}_{run_id}.csv"
     temp_ctrl_filename = f"temp_{dag_id}_{run_id}.ctrl"
     
@@ -174,8 +174,8 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
             run_id=run_id,
             start_date=start_date,
             end_date=end_date,
-            csv_filename=temp_csv_filename,
-            ctrl_filename=temp_ctrl_filename,
+            csv_filename=None,
+            ctrl_filename=None,
             current_page=page,
             last_search_after=search_after,
             status='RUNNING',
@@ -207,8 +207,8 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
                         run_id=run_id,
                         start_date=start_date,
                         end_date=end_date,
-                        csv_filename=temp_csv_filename,
-                        ctrl_filename=temp_ctrl_filename,
+                        csv_filename=None,
+                        ctrl_filename=None,
                         current_page=page,
                         last_search_after=search_after,
                         status='FAILED',
@@ -246,8 +246,8 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
                         run_id=run_id,
                         start_date=start_date,
                         end_date=end_date,
-                        csv_filename=temp_csv_filename,
-                        ctrl_filename=temp_ctrl_filename,
+                        csv_filename=None,
+                        ctrl_filename=None,
                         current_page=page,
                         last_search_after=next_search_after,
                         status='RUNNING',
@@ -314,8 +314,8 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
             run_id=run_id,
             start_date=start_date,
             end_date=end_date,
-            csv_filename=temp_csv_filename,
-            ctrl_filename=temp_ctrl_filename,
+            csv_filename=None,
+            ctrl_filename=None,
             current_page=page,
             last_search_after=search_after,
             status='FAILED',
@@ -345,7 +345,7 @@ def process_data(API_URL: str, TEMP_DIR: str, OUTPUT_DIR: str,CONTROL_DIR: str, 
             # ดึงข้อมูลไฟล์เดิม
             csv_filename = batch_state.get('csv_filename')
             control_filename = batch_state.get('ctrl_filename')
-            csv_path = os.path.join(OUTPUT_DIR, f"{csv_filename}.csv")
+            csv_path = os.path.join(OUTPUT_DIR, f"{csv_filename}")
             control_path = os.path.join(OUTPUT_DIR, f"{control_filename}")
 
             if csv_filename and control_filename:
