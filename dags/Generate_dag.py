@@ -26,6 +26,9 @@ from airflow.utils.trigger_rule import TriggerRule
 import pendulum
 from datetime import datetime, timedelta
 from components.check_previous_failed_batch import check_previous_failed_batch
+from airflow.sensors.time_sensor import TimeSensor
+from airflow.utils.timezone import utcnow
+from airflow.sensors.base import BaseSensorOperator
 
 from components.notifications import (
     send_running_notification,
@@ -77,6 +80,26 @@ default_args = {{
     'retry_delay': timedelta(seconds=1)
 }}
 
+class WaitUntilTimeSensor(BaseSensorOperator):
+
+    def poke(self, context):
+        dag_run_conf = context.get("dag_run").conf
+
+        if dag_run_conf.get("start_run"):
+            # Parse the `start_time` from parameters
+            target_time = datetime.fromisoformat(dag_run_conf.get("start_run"))
+            bangkok_tz = pytz.timezone('Asia/Bangkok')
+            target_time = bangkok_tz.localize(target_time)
+
+            # Get the current time in Bangkok timezone
+            now = datetime.now(bangkok_tz)
+
+            self.log.info(f"Waiting until {target_time}, current time is {now}")
+            return now >= target_time
+        else:
+            self.log.info("No start_run provided in dag_run configuration.")
+            return True
+
 # Create the DAG
 with DAG(
     DAG_NAME,
@@ -101,6 +124,13 @@ with DAG(
         provide_context=True,
         retries=1,
         op_args=[DEFAULT_CSV_COLUMNS, default_emails]
+    )
+
+    wait_for_start_time = WaitUntilTimeSensor(
+        task_id="wait_for_start_time",
+        poke_interval=60,  # Check every 30 seconds
+        mode="reschedule",  # Release worker slot between checks
+        trigger_rule=TriggerRule.ALL_SUCCESS
     )
     
     running_notification = PythonOperator(
@@ -149,7 +179,7 @@ with DAG(
     # Define Dependencies
     # check_previous_fails >> validate_input >> [running_notification, failure_notification]
     validate_input >> [running_notification, failure_notification]
-    validate_input >> check_previous_fails >> [running_notification, process_task, failure_notification]
+    validate_input >> wait_for_start_time >> check_previous_fails >> [running_notification, process_task, failure_notification]
     process_task >> [uploadtoFTP, failure_notification]
     uploadtoFTP >> [success_notification, failure_notification]
     process_task >> success_notification
