@@ -184,7 +184,7 @@ def upload_csv_ctrl_to_ftp_server_manual(default_emails: Dict[str, List[str]],
         # Get file names from XCom
         output_filename_csv = ti.xcom_pull(dag_id=dag_id, key='output_filename')
         output_filename_ctrl = ti.xcom_pull(dag_id=dag_id, key='control_filename')
-
+        dag_name = ti.xcom_pull(dag_id=dag_id, key='dag_name')
         # Validate file names
         if not output_filename_csv or not output_filename_ctrl:
             raise AirflowException("Missing file names from previous tasks")
@@ -193,8 +193,8 @@ def upload_csv_ctrl_to_ftp_server_manual(default_emails: Dict[str, List[str]],
         csv_remote_path = f'/10.250.1.101{ftp_path}{output_filename_csv}'
         ctrl_remote_path = f'/10.250.1.101{ftp_path}{output_filename_ctrl}'
 
-        csv_local_file_path = f'/opt/airflow/data/batch/{dag_id}/{output_filename_csv}'
-        ctrl_local_file_path = f'/opt/airflow/data/batch/{dag_id}/{output_filename_ctrl}'
+        csv_local_file_path = f'/opt/airflow/data/batch/{dag_name}/{output_filename_csv}'
+        ctrl_local_file_path = f'/opt/airflow/data/batch/{dag_name}/{output_filename_ctrl}'
 
         # Verify local files exist
         if not os.path.exists(csv_local_file_path):
@@ -207,7 +207,7 @@ def upload_csv_ctrl_to_ftp_server_manual(default_emails: Dict[str, List[str]],
         # Run lftp to upload files
         print(f"Starting upload of {csv_local_file_path} and {ctrl_local_file_path}...")
         run_lftp(
-            host='192.168.1.153',
+            host='34.124.138.144',
             username='airflow',
             password='airflow',
             local_file=csv_local_file_path,

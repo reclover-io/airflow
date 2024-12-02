@@ -492,7 +492,7 @@ def process_data_manual(API_HEADERS,default_emails,slack_webhook,**kwargs):
         
         # Store start time
         ti.xcom_push(key='batch_start_time', value=get_thai_time().isoformat())
-        
+        ti.xcom_push(key='dag_name', value=DAG_NAME)
         try:
             
             result = fetch_and_save_data(
