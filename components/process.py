@@ -340,7 +340,7 @@ def process_data(API_URL: str, TEMP_DIR: str, OUTPUT_DIR: str,CONTROL_DIR: str, 
         if (batch_state and 
             batch_state.get('csv_filename') and 
             batch_state.get('ctrl_filename')):
-            print(f"Batch {run_id} was already completed successfully. Skipping process_data.")
+            # print(f"Batch {run_id} was already completed successfully. Skipping process_data.")
 
             # ดึงข้อมูลไฟล์เดิม
             csv_filename = batch_state.get('csv_filename')
