@@ -132,17 +132,17 @@ def format_success_message(dag_id: str, run_id: str, current_time: datetime,
     start_date = conf.get('startDate')
 
     if conf.get("ftp") == None:
-        ftp_path = "ftps://10.250.1.101/ELK/daily/source_data/landing/ELK_MobileApp_Activity_Logs/"
+        ftp_path = f"ftps://10.250.1.101/ELK/daily/source_data/landing/{dag_id}/"
 
 
     elif conf.get("ftp") == False:
-        ftp_path = "/data/batch/ELK_MobileApp_Activity_Logs/"
+        ftp_path = f"/data/batch/{dag_id}/"
 
     if conf.get("ftp") == None:
-        ftp_path = "ftps://10.250.1.101/ELK/daily/source_data/landing/ELK_MobileApp_Activity_Logs/"
+        ftp_path = f"ftps://10.250.1.101/ELK/daily/source_data/landing/{dag_id}/"
 
     elif conf.get("ftp") == True:
-        ftp_path = "ftps://10.250.1.101/ELK/daily/source_data/landing/ELK_MobileApp_Activity_Logs/"
+        ftp_path = f"ftps://10.250.1.101/ELK/daily/source_data/landing/{dag_id}/"
         
     return f"""
         <p><strong>Batch Name:</strong> {dag_id}</p>
