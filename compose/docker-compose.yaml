@@ -71,8 +71,7 @@ services:
     restart: always
     ports:
       - "5433:5432"
-    networks:
-      - airflow-net
+    network_mode: host
 
   redis:
     container_name: airflow-redis
@@ -86,15 +85,14 @@ services:
       retries: 50
       start_period: 30s
     restart: always
-    networks:
-      - airflow-net
+    network_mode: host
 
   airflow-webserver:
     <<: *airflow-common
     container_name: airflow-webserver
     command: webserver
     ports:
-      - "8081:8080"
+      - "8080:8080"
     healthcheck:
       test: ["CMD", "curl","-f","--fail", "http://localhost:8080/health"]
       interval: 30s
@@ -109,9 +107,8 @@ services:
     environment:
       <<: *airflow-common-env
       PYTHONPATH: /opt/airflow
-      AIRFLOW__WEBSERVER__BASE_URL: https://34.124.138.144:8081
-    networks:
-      - airflow-net
+      AIRFLOW__WEBSERVER__BASE_URL: https://34.124.138.144:8080
+    network_mode: host
 
   airflow-scheduler:
     <<: *airflow-common
@@ -131,8 +128,7 @@ services:
     environment:
       <<: *airflow-common-env
       PYTHONPATH: /opt/airflow
-    networks:
-      - airflow-net
+    network_mode: host
 
   airflow-worker:
     <<: *airflow-common
@@ -155,8 +151,7 @@ services:
       <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
-    networks:
-      - airflow-net
+    network_mode: host
 
   airflow-triggerer:
     <<: *airflow-common
@@ -173,8 +168,7 @@ services:
       <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
-    networks:
-      - airflow-net
+    network_mode: host
 
   airflow-init:
     <<: *airflow-common
@@ -267,8 +261,7 @@ services:
       - bash
       - -c
       - airflow
-    networks:
-      - airflow-net
+    network_mode: host
 
   flower:
     <<: *airflow-common
@@ -289,28 +282,7 @@ services:
       <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
-    networks:
-      - airflow-net
-
-  ftps:
-    image: bfren/ftps
-    ports:
-      - "21:21"
-      - "990:990"
-      - "18700-18710:18700-18710"
-    environment:
-      BF_FTPS_EXTERNAL_IP: "34.124.138.144"
-      BF_FTPS_VSFTPD_USER: "airflow"
-      BF_FTPS_VSFTPD_PASS: "airflow"
-      BF_FTPS_DISABLE_TEMPLATE: "true"  # Ensures container does not overwrite vsftpd.conf
-    volumes:
-      - ../data/ftps/files:/files
-      - ../certs/vsftpd.pem:/ssl/server.pem
-    restart: always  
+    network_mode: host
 
 volumes:
   postgres-db-volume:
-
-networks:
-  airflow-net:
-    external: true

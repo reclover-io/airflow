@@ -94,7 +94,7 @@ class WaitUntilTimeSensor(BaseSensorOperator):
             # Get the current time in Bangkok timezone
             now = datetime.now(bangkok_tz)
 
-            self.log.info(f"Waiting until {target_time}, current time is {now}")
+            self.log.info(f"Waiting until {{target_time}}, current time is {{now}}")
             return now >= target_time
         else:
             self.log.info("No start_run provided in dag_run configuration.")
