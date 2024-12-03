@@ -10,6 +10,8 @@ from components.database import save_batch_state
 from components.database import get_batch_state , get_initial_start_time
 from components.utils import get_thai_time
 from components.slack_notifications import *
+from components.line_notification import *
+
 
 
 def format_thai_time(dt: datetime) -> str:
@@ -428,6 +430,17 @@ def send_notification(
     run_id = dag_run.run_id
     conf = dag_run.conf or {}
 
+    # message_text = (
+    #     f"🔔 Batch Process Notification\n"
+    #     f"Batch Name: {dag_id}\n"
+    #     f"Run ID: {run_id}\n"
+    #     f"Start Time: {current_time}\n"
+    #     f"Status: Running"
+    # )
+    # message = create_line_text_message(message_text)
+    # send_line_message(message)
+
+
     recipients = get_notification_recipients(conf, notification_type, default_emails)
     if recipients:
         try:
@@ -439,103 +452,182 @@ def send_notification(
             error_msg = f"Failed to send email notification: {str(e)}"
             print(f"Failed to send email {notification_type} notification: {str(e)}")
             errors.append(error_msg)
-        
-    should_slack = ti.xcom_pull(key='should_slack', task_ids='validate_input')
+    
+        # ตรวจสอบว่าควรส่ง LINE หรือไม่
+    should_line = True
 
-    if should_slack:
-        if slack_webhook and context:
+    if should_line:
+        if context:
             try:
-                dag_run = context['dag_run']
-                ti = context['task_instance']
-                
                 batch_state = get_batch_state(dag_run.dag_id, dag_run.run_id)
-                
                 start_time_str = ti.xcom_pull(key='batch_start_time')
                 start_time = datetime.fromisoformat(start_time_str) if start_time_str else get_thai_time()
 
-                notifier = SlackNotifier(slack_webhook)
-
+                # เรียกฟังก์ชัน LINE ตามประเภทของ notification
                 if notification_type == "start":
-                    slack_message = create_slack_running_message(
-                        dag_id=dag_run.dag_id,
-                        run_id=dag_run.run_id,
-                        start_time=start_time,
-                        conf=conf
+                    message_text = (
+                        f"🔔 Batch Process Notification 🔔\n"
+                        f"Batch Name: {dag_run.dag_id}\n"
+                        f"Run ID: {dag_run.run_id}\n"
+                        f"Start Time: {start_time}\n"
+                        f"Status: {notification_type}"
                     )
-
-                elif notification_type == "success" or notification_type == "SUCCESS" or notification_type == "normal":
-                    csv_filename = ti.xcom_pull(key='output_filename')
-                    control_filename = ti.xcom_pull(key='control_filename', default='Not available')
-                    slack_message = create_slack_success_message(
-                        dag_id=dag_run.dag_id,
-                        run_id=dag_run.run_id,
-                        start_time=start_time,
-                        end_time=current_time,
-                        conf=conf,
-                        csv_filename=ti.xcom_pull(key='output_filename'),
-                        control_filename=ti.xcom_pull(key='control_filename', default='Not available'),
-                        batch_state=batch_state,
+                elif notification_type in ["success", "SUCCESS", "normal"]:
+                    message_text = (
+                        f"🔔 Batch Process Notification\n"
+                        f"Batch Name: {dag_run.dag_id}\n"
+                        f"Run ID: {dag_run.run_id}\n"
+                        f"Start Time: {start_time}\n"
+                        f"Status: {notification_type}"
                     )
-                    
                 elif notification_type == "fail" and retry_count and max_retries:
                     error_message = ti.xcom_pull(key='error_message', default='Unknown error')
-                    slack_message = create_slack_retry_message(
-                        title=subject,
-                        dag_id=dag_run.dag_id,
-                        run_id=dag_run.run_id,
-                        retry_count=retry_count,
-                        max_retries=max_retries,
-                        current_time=current_time,
-                        error_message=error_message,
-                        conf=conf,
-                        batch_state=batch_state
+                    message_text = (
+                        f"🔔 Batch Process Notification\n"
+                        f"Batch Name: {dag_run.dag_id}\n"
+                        f"Run ID: {dag_run.run_id}\n"
+                        f"Start Time: {start_time}\n"
+                        f"Status: {notification_type}"
                     )
-
                 elif notification_type == "fail":
                     error_message = ti.xcom_pull(key='error_message', default='Unknown error')
-                    slack_message = create_slack_err_message(
-                        title=subject,
-                        dag_id=dag_run.dag_id,
-                        run_id=dag_run.run_id,
-                        start_time=start_time,
-                        end_time=current_time,
-                        error_message=error_message,
-                        conf=conf,
-                        batch_state=batch_state
+                    message_text = (
+                        f"🔔 Batch Process Notification\n"
+                        f"Batch Name: {dag_run.dag_id}\n"
+                        f"Run ID: {dag_run.run_id}\n"
+                        f"Start Time: {start_time}\n"
+                        f"Status: {notification_type}"
                     )
-
                 elif notification_type == "pause":
-                    slack_message = create_slack_manual_pause_message(
-                        title=subject,
-                        dag_id=dag_run.dag_id,
-                        run_id=dag_run.run_id,
-                        start_time=start_time,
-                        end_time=current_time,
-                        conf=conf,
-                        batch_state=batch_state
+                    message_text = (
+                        f"🔔 Batch Process Notification\n"
+                        f"Batch Name: {dag_run.dag_id}\n"
+                        f"Run ID: {dag_run.run_id}\n"
+                        f"Start Time: {start_time}\n"
+                        f"Status: {notification_type}"
                     )
-
                 elif notification_type == "resume":
-                    slack_message = create_slack_resume_message(
-                        title=subject,
-                        dag_id=dag_run.dag_id,
-                        run_id=dag_run.run_id,
-                        start_time=start_time,
-                        conf=conf,
-                        previous_state=previous_state,
-                        batch_state=batch_state
+                    message_text = (
+                        f"🔔 Batch Process Notification\n"
+                        f"Batch Name: {dag_run.dag_id}\n"
+                        f"Run ID: {dag_run.run_id}\n"
+                        f"Start Time: {start_time}\n"
+                        f"Status: {notification_type}"
                     )
-
                 else:
                     raise ValueError(f"Unsupported notification type: {notification_type}")
 
-                notifier.send_message(slack_message)
-                slack_sent = True
+                line_message = create_line_text_message(message_text)
+                send_line_message(line_message)
+                line_sent = True
+                if line_sent:
+                    print("Send Line message successfully")
             except Exception as e:
-                error_msg = f"Failed to send Slack notification: {str(e)}"
-                print(f"Failed to send Slack notification: {str(e)}")
+                error_msg = f"Failed to send LINE notification: {str(e)}"
+                print(f"Failed to send LINE notification: {str(e)}")
                 errors.append(error_msg)
                 raise AirflowException(error_msg)
+
+    # ตรวจสอบหากไม่มีการส่ง notification ใดสำเร็จ
+    if not email_sent and not line_sent:
+        error_msg = "Failed to send notifications:\n" + "\n".join(errors)
+        raise AirflowException(error_msg)
+
+    # should_slack = ti.xcom_pull(key='should_slack', task_ids='validate_input')
+    # if should_slack:
+    #     if slack_webhook and context:
+    #         try:
+    #             dag_run = context['dag_run']
+    #             ti = context['task_instance']
+                
+    #             batch_state = get_batch_state(dag_run.dag_id, dag_run.run_id)
+                
+    #             start_time_str = ti.xcom_pull(key='batch_start_time')
+    #             start_time = datetime.fromisoformat(start_time_str) if start_time_str else get_thai_time()
+
+    #             notifier = SlackNotifier(slack_webhook)
+
+    #             if notification_type == "start":
+    #                 slack_message = create_slack_running_message(
+    #                     dag_id=dag_run.dag_id,
+    #                     run_id=dag_run.run_id,
+    #                     start_time=start_time,
+    #                     conf=conf
+    #                 )
+
+    #             elif notification_type == "success" or notification_type == "SUCCESS" or notification_type == "normal":
+    #                 csv_filename = ti.xcom_pull(key='output_filename')
+    #                 control_filename = ti.xcom_pull(key='control_filename', default='Not available')
+    #                 slack_message = create_slack_success_message(
+    #                     dag_id=dag_run.dag_id,
+    #                     run_id=dag_run.run_id,
+    #                     start_time=start_time,
+    #                     end_time=current_time,
+    #                     conf=conf,
+    #                     csv_filename=ti.xcom_pull(key='output_filename'),
+    #                     control_filename=ti.xcom_pull(key='control_filename', default='Not available'),
+    #                     batch_state=batch_state,
+    #                 )
+                    
+    #             elif notification_type == "fail" and retry_count and max_retries:
+    #                 error_message = ti.xcom_pull(key='error_message', default='Unknown error')
+    #                 slack_message = create_slack_retry_message(
+    #                     title=subject,
+    #                     dag_id=dag_run.dag_id,
+    #                     run_id=dag_run.run_id,
+    #                     retry_count=retry_count,
+    #                     max_retries=max_retries,
+    #                     current_time=current_time,
+    #                     error_message=error_message,
+    #                     conf=conf,
+    #                     batch_state=batch_state
+    #                 )
+
+    #             elif notification_type == "fail":
+    #                 error_message = ti.xcom_pull(key='error_message', default='Unknown error')
+    #                 slack_message = create_slack_err_message(
+    #                     title=subject,
+    #                     dag_id=dag_run.dag_id,
+    #                     run_id=dag_run.run_id,
+    #                     start_time=start_time,
+    #                     end_time=current_time,
+    #                     error_message=error_message,
+    #                     conf=conf,
+    #                     batch_state=batch_state
+    #                 )
+
+    #             elif notification_type == "pause":
+    #                 slack_message = create_slack_manual_pause_message(
+    #                     title=subject,
+    #                     dag_id=dag_run.dag_id,
+    #                     run_id=dag_run.run_id,
+    #                     start_time=start_time,
+    #                     end_time=current_time,
+    #                     conf=conf,
+    #                     batch_state=batch_state
+    #                 )
+
+    #             elif notification_type == "resume":
+    #                 slack_message = create_slack_resume_message(
+    #                     title=subject,
+    #                     dag_id=dag_run.dag_id,
+    #                     run_id=dag_run.run_id,
+    #                     start_time=start_time,
+    #                     conf=conf,
+    #                     previous_state=previous_state,
+    #                     batch_state=batch_state
+    #                 )
+
+    #             else:
+    #                 raise ValueError(f"Unsupported notification type: {notification_type}")
+
+    #             notifier.send_message(slack_message)
+    #             slack_sent = True
+    #         except Exception as e:
+    #             error_msg = f"Failed to send Slack notification: {str(e)}"
+    #             print(f"Failed to send Slack notification: {str(e)}")
+    #             errors.append(error_msg)
+    #             raise AirflowException(error_msg)
         
     # if (not email_sent and not slack_sent) or (slack_webhook and not slack_sent):
     #     error_msg = "Failed to send notifications:\n" + "\n".join(errors)
