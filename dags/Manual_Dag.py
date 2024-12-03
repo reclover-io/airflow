@@ -122,7 +122,7 @@ with DAG(
         provide_context=True,
         retries=3,
         op_args=[API_HEADERS,default_emails,slack_webhook],
-        trigger_rule=TriggerRule.ALL_SUCCESS
+        trigger_rule=TriggerRule.ONE_SUCCESS
     )
     
     success_notification = PythonOperator(
@@ -147,8 +147,6 @@ with DAG(
         provide_context=True,
         op_args=[default_emails],
         trigger_rule=TriggerRule.ALL_SUCCESS,
-        retries=3
-        
     )
 
     validate_input >> [running_notification, failure_notification]
