@@ -39,7 +39,7 @@ def run_lftp(host, username, password, local_file, remote_path, local_file_ctrl,
         print(f"Files uploaded successfully to {remote_path} and {remote_path_ctrl}.")
 
     except Exception as e:
-        raise AirflowException(f"An error occurred while running lftp: {e}")
+        raise AirflowException(f"Upload file to FTP Server failed because failed to connect to FTP Server.")
 
 
 def upload_csv_ctrl_to_ftp_server(default_emails: Dict[str, List[str]],
@@ -83,12 +83,25 @@ def upload_csv_ctrl_to_ftp_server(default_emails: Dict[str, List[str]],
         ctrl_local_file_path = f'/opt/airflow/data/batch/{dag_id}/{output_filename_ctrl}'
 
         # Verify local files exist
-        if not os.path.exists(csv_local_file_path):
-            print(f"CSV file not found: {csv_local_file_path}")
-            raise FileNotFoundError(f"Upload file to FTP Server failed because can't find the file to upload.")
-        if not os.path.exists(ctrl_local_file_path):
-            print(f"Control file not found: {ctrl_local_file_path}")
-            raise FileNotFoundError(f"Upload file to FTP Server failed because can't find the file to upload.")
+        if not os.path.exists(csv_local_file_path) or not os.path.exists(ctrl_local_file_path):
+            print(f"CSV file not found: {csv_local_file_path} and Control file: {ctrl_local_file_path}")
+            error_msg = "Upload file to FTP Server failed because can't find the file to upload."
+            ti.xcom_push(key='error_message', value=error_msg)
+            save_batch_state(
+                batch_id=dag_id,
+                run_id=run_id,
+                start_date=conf.get('startDate'),
+                end_date=conf.get('endDate'),
+                csv_filename=output_filename_csv,
+                ctrl_filename=output_filename_ctrl,
+                current_page=batch_state.get('current_page', 1) if batch_state else 1,
+                last_search_after=batch_state.get('last_search_after') if batch_state else None,
+                status='FAILED',
+                error_message=f"FTP upload failed: {error_msg}",
+                total_records=batch_state.get('total_records') if batch_state else None,
+                fetched_records=batch_state.get('fetched_records', 0) if batch_state else 0
+            )
+            raise AirflowException(error_msg)
 
         # Run lftp to upload files
         print(f"Starting upload of {csv_local_file_path} and {ctrl_local_file_path}...")
@@ -204,12 +217,25 @@ def upload_csv_ctrl_to_ftp_server_manual(default_emails: Dict[str, List[str]],
         ctrl_local_file_path = f'/opt/airflow/data/batch/{dag_name}/{output_filename_ctrl}'
 
         # Verify local files exist
-        if not os.path.exists(csv_local_file_path):
-            print(f"CSV file not found: {csv_local_file_path}")
-            raise FileNotFoundError(f"Upload file to FTP Server failed because can't find the file to upload.")
-        if not os.path.exists(ctrl_local_file_path):
-            print(f"Control file not found: {ctrl_local_file_path}")
-            raise FileNotFoundError(f"Upload file to FTP Server failed because can't find the file to upload.")
+        if not os.path.exists(csv_local_file_path) or not os.path.exists(ctrl_local_file_path):
+            print(f"CSV file not found: {csv_local_file_path} and Control file: {ctrl_local_file_path}")
+            error_msg = "Upload file to FTP Server failed because can't find the file to upload."
+            ti.xcom_push(key='error_message', value=error_msg)
+            save_batch_state(
+                batch_id=dag_id,
+                run_id=run_id,
+                start_date=conf.get('startDate'),
+                end_date=conf.get('endDate'),
+                csv_filename=output_filename_csv,
+                ctrl_filename=output_filename_ctrl,
+                current_page=batch_state.get('current_page', 1) if batch_state else 1,
+                last_search_after=batch_state.get('last_search_after') if batch_state else None,
+                status='FAILED',
+                error_message=f"FTP upload failed: {error_msg}",
+                total_records=batch_state.get('total_records') if batch_state else None,
+                fetched_records=batch_state.get('fetched_records', 0) if batch_state else 0
+            )
+            raise AirflowException(error_msg)
 
         # Run lftp to upload files
         print(f"Starting upload of {csv_local_file_path} and {ctrl_local_file_path}...")

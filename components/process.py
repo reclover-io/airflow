@@ -234,6 +234,27 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
                         current_page_size = total_records - fetched_count
                         records = records[:current_page_size]  # ตัดข้อมูลส่วนเกินทิ้ง
 
+                    total, used, free = shutil.disk_usage("/")
+                    free_gb = free // (2**30)
+                    min_space_gb = 5
+                    if free_gb < min_space_gb:
+                        error_msg = f"Failed to create csv file because of insufficient space."
+                        save_batch_state(
+                            batch_id=dag_id,
+                            run_id=run_id,
+                            start_date=start_date,
+                            end_date=end_date,
+                            csv_filename=None,
+                            ctrl_filename=None,
+                            current_page=page,
+                            last_search_after=search_after,
+                            status='FAILED',
+                            error_message=error_msg,
+                            total_records=total_records,
+                            fetched_records=fetched_count
+                        )
+                        raise AirflowException(error_msg)
+
                     save_temp_data(records, temp_file_path, headers=should_write_header, columns=csv_columns)
                     should_write_header = False
                     
