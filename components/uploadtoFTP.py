@@ -149,7 +149,7 @@ def upload_csv_ctrl_to_ftp_server(default_emails: Dict[str, List[str]],
         # Retry notification logic
         try_number = ti.try_number
         max_retries = ti.max_tries
-        if try_number < max_retries:
+        if try_number <= max_retries:
             send_retry_notification(
                 dag_id=dag_id,
                 run_id=run_id,
