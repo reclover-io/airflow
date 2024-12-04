@@ -82,12 +82,10 @@ class WaitUntilTimeSensor(BaseSensorOperator):
 with DAG(
     DAG_NAME,
     default_args=default_args,
-    description='Fetch API data with date range and save to CSVSSSS',
     #schedule_interval="0 0 * * *",
     schedule_interval=None,
     start_date=datetime(2024, 11, 25),
-    catchup=False,
-    tags=['api', 'csv', 'backup']
+    catchup=False
 ) as dag:
     
     check_previous_fails = PythonOperator(

@@ -93,7 +93,7 @@ def format_running_message(dag_id: str, run_id: str, start_time: datetime, conf:
 
 def format_success_message(dag_id: str, run_id: str, current_time: datetime, 
                          conf: Dict, csv_filename: str, control_filename: str,
-                         batch_state: Optional[Dict] = None, data_dt: str = None, ftp_status: str = None) -> str:
+                         batch_state: Optional[Dict] = None, data_dt: str = None, ftp_status: str = None, **kwargs) -> str:
     """Format success notification message with processing details"""
 
     start_time = get_initial_start_time(dag_id, run_id)
@@ -131,18 +131,16 @@ def format_success_message(dag_id: str, run_id: str, current_time: datetime,
 
     start_date = conf.get('startDate')
 
-    if conf.get("ftp") == None:
-        ftp_path = f"ftps://10.250.1.101/ELK/daily/source_data/landing/{dag_id}/"
+    remote_path = kwargs.get('remote_path')
 
+    if conf.get("ftp") == None:
+        ftp_path = f"ftps:/{remote_path}"
 
     elif conf.get("ftp") == False:
-        ftp_path = f"/data/batch/{dag_id}/"
-
-    if conf.get("ftp") == None:
-        ftp_path = f"ftps://10.250.1.101/ELK/daily/source_data/landing/{dag_id}/"
+        ftp_path = f"/data/airflow/data/{dag_id}/"
 
     elif conf.get("ftp") == True:
-        ftp_path = f"ftps://10.250.1.101/ELK/daily/source_data/landing/{dag_id}/"
+        ftp_path = f"ftps:/{remote_path}"
         
     return f"""
         <p><strong>Batch Name:</strong> {dag_id}</p>
@@ -610,7 +608,7 @@ def send_success_notification(default_emails, slack_webhook=None, **context):
         start_time = datetime.fromisoformat(start_time_str)
     
     current_time = get_thai_time()
-    
+    remote_path = ti.xcom_pull(key='remote_path', task_ids='uploadtoFTP')
     subject = f"Batch Process {dag_id} for {data_dt} Completed Successfully"
     html_content = format_success_message(
         dag_id, 
@@ -621,7 +619,8 @@ def send_success_notification(default_emails, slack_webhook=None, **context):
         control_filename,
         batch_state,
         data_dt,
-        ftp_status
+        ftp_status,
+        remote_path=remote_path
     )
     
     if conf.get('emailSuccess'):
