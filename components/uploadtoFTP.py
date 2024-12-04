@@ -72,8 +72,8 @@ def upload_csv_ctrl_to_ftp_server(default_emails: Dict[str, List[str]],
             raise AirflowException("Missing file names from previous tasks")
 
         # Prepare file paths
-        csv_remote_path = f'/10.250.1.101/ELK/daily/source_data/landing/{dag_id}/{output_filename_csv}'
-        ctrl_remote_path = f'/10.250.1.101/ELK/daily/source_data/landing/{dag_id}/{output_filename_ctrl}'
+        csv_remote_path = f'/ELK/daily/source_data/landing/{dag_id}/{output_filename_csv}'
+        ctrl_remote_path = f'/ELK/daily/source_data/landing/{dag_id}/{output_filename_ctrl}'
 
         remote_path = f'/ELK/daily/source_data/landing/{dag_id}/'
 
@@ -194,8 +194,8 @@ def upload_csv_ctrl_to_ftp_server_manual(default_emails: Dict[str, List[str]],
             raise AirflowException("Missing file names from previous tasks")
 
         # Prepare file paths
-        csv_remote_path = f'/10.250.1.101{ftp_path}{output_filename_csv}'
-        ctrl_remote_path = f'/10.250.1.101{ftp_path}{output_filename_ctrl}'
+        csv_remote_path = f'{ftp_path}{output_filename_csv}'
+        ctrl_remote_path = f'{ftp_path}{output_filename_ctrl}'
 
         remote_path = f'{ftp_path}'
         ti.xcom_push(key='remote_path', value=remote_path)
