@@ -20,11 +20,9 @@ default_args = {
 with DAG(
     DAG_NAME,
     default_args=default_args,
-    description='Create a table in the Airflow database.',
     schedule_interval=None,
     start_date=datetime(2024, 1, 1),
-    catchup=False,
-    tags=['database', 'table']
+    catchup=False
 ) as dag:
     
     create_table_task = PythonOperator(
