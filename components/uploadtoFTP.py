@@ -75,6 +75,10 @@ def upload_csv_ctrl_to_ftp_server(default_emails: Dict[str, List[str]],
         csv_remote_path = f'/10.250.1.101/ELK/daily/source_data/landing/{dag_id}/{output_filename_csv}'
         ctrl_remote_path = f'/10.250.1.101/ELK/daily/source_data/landing/{dag_id}/{output_filename_ctrl}'
 
+        remote_path = f'/ELK/daily/source_data/landing/{dag_id}/'
+
+        ti.xcom_push(key='remote_path', value=remote_path)
+
         csv_local_file_path = f'/opt/airflow/data/batch/{dag_id}/{output_filename_csv}'
         ctrl_local_file_path = f'/opt/airflow/data/batch/{dag_id}/{output_filename_ctrl}'
 
@@ -192,6 +196,9 @@ def upload_csv_ctrl_to_ftp_server_manual(default_emails: Dict[str, List[str]],
         # Prepare file paths
         csv_remote_path = f'/10.250.1.101{ftp_path}{output_filename_csv}'
         ctrl_remote_path = f'/10.250.1.101{ftp_path}{output_filename_ctrl}'
+
+        remote_path = f'{ftp_path}'
+        ti.xcom_push(key='remote_path', value=remote_path)
 
         csv_local_file_path = f'/opt/airflow/data/batch/{dag_name}/{output_filename_csv}'
         ctrl_local_file_path = f'/opt/airflow/data/batch/{dag_name}/{output_filename_ctrl}'

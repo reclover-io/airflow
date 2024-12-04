@@ -51,7 +51,7 @@ default_args = {
 }
 
 default_emails = {
-    'email': ['elk_team@gmail.com'],
+    'email': [],
     'emailSuccess': [],
     'emailFail': [],
     'emailPause': [],
@@ -82,12 +82,11 @@ class WaitUntilTimeSensor(BaseSensorOperator):
             self.log.info("No start_run provided in dag_run configuration.")
             return True
 
-DAG_NAME="Manual_Dag"
+DAG_NAME="Manual_Run"
 # Create the DAG
 with DAG(
     DAG_NAME,
     default_args=default_args,
-    description='Fetch API data with date range and save to CSV',
     schedule_interval=None,
     start_date=datetime(2024,1,1),
     catchup=False
@@ -150,8 +149,7 @@ with DAG(
     )
 
     validate_input >> [running_notification, failure_notification]
-    validate_input >> [running_notification, process_task, failure_notification]
+    validate_input >> wait_for_start_time >> [process_task, failure_notification]
     process_task >> [uploadtoFTP, failure_notification]
     uploadtoFTP >> [success_notification, failure_notification]
     process_task >> success_notification
-
