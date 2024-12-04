@@ -95,7 +95,7 @@ def format_running_message(dag_id: str, run_id: str, start_time: datetime, conf:
 
 def format_success_message(dag_id: str, run_id: str, current_time: datetime, 
                          conf: Dict, csv_filename: str, control_filename: str,
-                         batch_state: Optional[Dict] = None, data_dt: str = None, ftp_status: str = None) -> str:
+                         batch_state: Optional[Dict] = None, data_dt: str = None, ftp_status: str = None, **kwargs) -> str:
     """Format success notification message with processing details"""
 
     start_time = get_initial_start_time(dag_id, run_id)
@@ -133,18 +133,16 @@ def format_success_message(dag_id: str, run_id: str, current_time: datetime,
 
     start_date = conf.get('startDate')
 
-    if conf.get("ftp") == None:
-        ftp_path = "ftps://10.250.1.101/ELK/daily/source_data/landing/ELK_MobileApp_Activity_Logs/"
+    remote_path = kwargs.get('remote_path')
 
+    if conf.get("ftp") == None:
+        ftp_path = f"ftps:/{remote_path}"
 
     elif conf.get("ftp") == False:
-        ftp_path = "/data/batch/ELK_MobileApp_Activity_Logs/"
-
-    if conf.get("ftp") == None:
-        ftp_path = "ftps://10.250.1.101/ELK/daily/source_data/landing/ELK_MobileApp_Activity_Logs/"
+        ftp_path = f"/data/airflow/data/{dag_id}/"
 
     elif conf.get("ftp") == True:
-        ftp_path = "ftps://10.250.1.101/ELK/daily/source_data/landing/ELK_MobileApp_Activity_Logs/"
+        ftp_path = f"ftps:/{remote_path}"
         
     return f"""
         <p><strong>Batch Name:</strong> {dag_id}</p>
@@ -404,6 +402,14 @@ def send_email_notification(to: List[str], subject: str, html_content: str):
         error_msg = f"Failed to send email to {to}: {str(e)}"
         print(f"Failed to send email: {str(e)}")
         raise AirflowException(error_msg)
+    
+def get_csv_column_text(conf: Dict) -> str:
+    """
+    Generate the text for CSV Columns if they exist in the configuration.
+    """
+    if 'csvColumn' in conf and conf['csvColumn']:
+        return f"   • CSV Column: [ {', '.join(conf['csvColumn'])} ]\n"
+    return ""
 
 def send_notification(
     subject: str, 
@@ -416,7 +422,7 @@ def send_notification(
     current_time: Optional[datetime] = None,
     retry_count: Optional[int] = None,
     max_retries: Optional[int] = None,
-    previous_state: Optional[Dict] = None, **kwargs
+    previous_state: Optional[Dict] = None, **kwargs 
     
 ):
     """Send notification to appropriate recipients based on type"""
@@ -452,70 +458,80 @@ def send_notification(
                 batch_state = get_batch_state(dag_run.dag_id, dag_run.run_id)
                 start_time_str = ti.xcom_pull(key='batch_start_time')
                 start_time = datetime.fromisoformat(start_time_str) if start_time_str else get_thai_time()
-
+                start_date = conf.get('startDate')
+                start_date_dt = datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S.%f')
+                data_dt = start_date_dt.strftime('%Y-%m-%d')
                 # เรียกฟังก์ชัน LINE ตามประเภทของ notification
+                if conf.get('csvColumn'):
+                    csv_column_text = f'{csv_column_text}'
+                else:
+                    csv_column_text = ''
                 if notification_type == "start":
                     message_text = (
-                        f"🔔 Batch Process Notification 🔔\n"
+                        f"Batch Process {dag_id} for {data_dt} Started at {format_thai_time(start_time)}\n\n"
                         f"Batch Name: {dag_id}\n"
                         f"Run ID: {run_id}\n"
                         f"Start Time: {format_thai_time(start_time)}\n"
                         f"Status: Starting New Process\n\n"
                         
-                        f"🛠️Batch Configuration🛠️\n"
+                        f"Batch Configuration\n"
                         f"Start Date: {conf.get('startDate', 'Not specified')}\n"
-                        f"End Date: {conf.get('startDate', 'Not specified')}\n"
+                        f"End Date: {conf.get('endDate', 'Not specified')}\n"
                         f"{csv_column_text}"
                     )
                 elif notification_type in ["success", "SUCCESS", "normal"]:
                     csv_filename=ti.xcom_pull(key='output_filename'),
                     control_filename=ti.xcom_pull(key='control_filename', default='Not available'),
-                    elapsed_time = end_time - start_time
-                    hours, remainder = divmod(int(elapsed_time.total_seconds()), 3600)
-                    minutes, seconds = divmod(remainder, 60)
-                    elapsed_str = f"{hours}h {minutes}m {seconds}s"
                     start_time = get_initial_start_time(dag_id, run_id)
                     fetched_records = batch_state.get('fetched_records', 0)
                     range_time_start = conf.get('startDate')
                     range_time_end = conf.get('endDate')
+                    start_date = conf.get('startDate')
+                    start_date_dt = datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S.%f')
+                    data_dt = start_date_dt.strftime('%Y-%m-%d')
+                    elapsed_time = end_time - start_time
+                    hours, remainder = divmod(int(elapsed_time.total_seconds()), 3600)
+                    minutes, seconds = divmod(remainder, 60)
+                    elapsed_str = f"{hours}h {minutes}m {seconds}s"
+                    remote_path = kwargs.get('remote_path')
                     ftp_path = (
-                        "ftps://10.250.1.101/ELK/daily/source_data/landing/ELK_MobileApp_Activity_Logs/"
+                        f"ftps:/{remote_path}"
                             if conf.get("ftp") else
-                        "/data/batch/ELK_MobileApp_Activity_Logs/"
+                        f"/data/airflow/data/{dag_id}"
                     )
                     message_text = (
-                        f"🔔 Batch Process Notification 🔔\n"
+                        f"Batch Process {dag_id} for {data_dt} Completed Successfully\n\n"
                         f"Batch Name: {dag_id}\n"
                         f"Run ID: {run_id}\n"
                         f"Start Time: {format_thai_time(start_time)}\n"
                         f"End Time: {format_thai_time(current_time)}\n"
+                        f"Total Elapsed Time: {elapsed_str}\n"
                         f"Status: Completed\n\n"
                         
                         f"Processing Summary\n"
                         f"\t• Total Records Processed: {fetched_records}\n"
-                        f"\t• Range Time: {range_time_start} - {range_time_end}\n\n"
+                        f"\t• Data Date Time: {data_dt} \n\n"
                         
                         f"Output Information\n"
-                        f"\t• Path: {ftp_path}\n"
+                        f"Path: {ftp_path}"
                         f"\t• CSV Filename: {csv_filename}\n"
                         f"\t• Control Filename: {control_filename}\n\n"
                         
-                        f"🛠️Batch Configuration🛠️\n"
-                        f"Start Date: {conf.get('startDate', 'Not specified')}\n"
-                        f"End Date: {conf.get('startDate', 'Not specified')}\n"
-                        f"{csv_column_text}"
                     )
                 elif notification_type == "fail" and retry_count and max_retries:
                     error_message = ti.xcom_pull(key='error_message', default='Unknown error')
                     fetched_records = batch_state.get('fetched_records', 0)
                     total_records = batch_state.get('total_records')
                     current_page = batch_state.get('current_page', 1)
+                    start_date = conf.get('startDate')
+                    start_date_dt = datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S.%f')
+                    data_dt = start_date_dt.strftime('%Y-%m-%d')
                     if total_records and total_records > 0:
                         progress_percentage = (fetched_records / total_records * 100)
                     else:
                         progress_percentage = 0
                     message_text = (
-                        f"🔔 Batch Process Notification 🔔\n"
+                        f"Batch Process {dag_id} for {data_dt} Failed - Retry {retry_count}/{max_retries} \n\n"
                         f"Batch Name: {dag_id}\n"
                         f"Run ID: {run_id}\n"
                         f"Time: {format_thai_time(current_time)}\n"
@@ -532,21 +548,32 @@ def send_notification(
                 elif notification_type == "fail":
                     error_message = ti.xcom_pull(key='error_message', default='Unknown error')
                     elapsed_time = end_time - start_time
+                    hours, remainder = divmod(int(elapsed_time.total_seconds()), 3600)
+                    minutes, seconds = divmod(remainder, 60)
+                    elapsed_str = f"{hours}h {minutes}m {seconds}s"
                     fetched_records = batch_state.get('fetched_records', 0)
                     total_records = batch_state.get('total_records')
                     current_page = batch_state.get('current_page', 1)
+                    start_date = conf.get('startDate')
+                    start_date_dt = datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S.%f')
+                    data_dt = start_date_dt.strftime('%Y-%m-%d')
+                    
                     if total_records and total_records > 0:
                         progress_percentage = (fetched_records / total_records * 100)
                     else:
                         progress_percentage = 0
+                    if conf.get('csvColumn'):
+                        csv_column_text = f'{csv_column_text}'
+                    else:
+                        csv_column_text = ''
                     message_text = (
-                        f"🔔 Batch Process Notification 🔔\n"
+                        f"Batch Process {dag_id} for {data_dt} Failed\n\n"
                         f"Batch Name: {dag_id}\n"
                         f"Run ID: {run_id}\n"
                         f"Start Time: {format_thai_time(start_time)}\n"
                         f"End Time: {format_thai_time(end_time)}\n"
-                        f"Elapsed Time: {elapsed_time}\n"
-                        f"Status: Fail\n"
+                        f"Elapsed Time: {elapsed_str}\n"
+                        f"Status: Failed\n"
                         f"Error Message: {error_message}\n\n"
                         
                         f"Progress Information\n"
@@ -554,12 +581,12 @@ def send_notification(
                         f"\t• Progress: {progress_percentage:.2f}%\n"
                         f"\t• Current Page: {current_page}\n\n"
                         
-                        f"🛠️Batch Configuration🛠️\n"
+                        f"Batch Configuration\n"
                         f"Start Date: {conf.get('startDate', 'Not specified')}\n"
-                        f"End Date: {conf.get('startDate', 'Not specified')}\n"
-                        f"{csv_column_text}\n\n"
+                        f"End Date: {conf.get('endDate', 'Not specified')}\n"
+                        f"{csv_column_text}"
     
-                        f"Note: System will automatically retry the process."
+                        f"\nNote: To resume this process, please run the batch again with the same Run ID."
                     )
                 elif notification_type == "pause":
                     elapsed_time = end_time - start_time
@@ -569,12 +596,19 @@ def send_notification(
                     fetched_records = batch_state.get('fetched_records', 0)
                     total_records = batch_state.get('total_records')
                     current_page = batch_state.get('current_page', 1)
+                    start_date = conf.get('startDate')
+                    start_date_dt = datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S.%f')
+                    data_dt = start_date_dt.strftime('%Y-%m-%d')
                     if total_records and total_records > 0:
                         progress_percentage = (fetched_records / total_records * 100)
                     else:
                         progress_percentage = 0
+                    if conf.get('csvColumn'):
+                        csv_column_text = f'{csv_column_text}'
+                    else:
+                        csv_column_text = ''
                     message_text = (
-                        f"🔔 Batch Process Notification 🔔\n"
+                        f"Batch Process {dag_id} for {data_dt} Has Been Manually Paused \n"
                         f"Batch Name: {dag_id}\n"
                         f"Run ID: {run_id}\n"
                         f"Start Time: {format_thai_time(start_time)}\n"
@@ -588,37 +622,45 @@ def send_notification(
                         f"\t• Progress: {progress_percentage:.2f}%\n"
                         f"\t• Current Page: {current_page}\n\n"
                         
-                        f"🛠️Batch Configuration🛠️\n"
+                        f"Batch Configuration\n"
                         f"Start Date: {conf.get('startDate', 'Not specified')}\n"
-                        f"End Date: {conf.get('startDate', 'Not specified')}\n"
-                        f"{csv_column_text}\n\n"
+                        f"End Date: {conf.get('endDate', 'Not specified')}\n"
+                        f"{csv_column_text}"
     
-                        f"Note: To resume this process, please run the batch again with the same Run ID."
+                        f"\nNote: To resume this process, please run the batch again with the same Run ID."
                     )
                 elif notification_type == "resume":
                     last_updated = previous_state.get('updated_at')
+                    previous_status = previous_state.get('status', 'Unknown')
                     fetched_records = batch_state.get('fetched_records', 0)
                     total_records = batch_state.get('total_records')
+                    start_date = conf.get('startDate')
+                    start_date_dt = datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S.%f')
+                    data_dt = start_date_dt.strftime('%Y-%m-%d')
                     if total_records and total_records > 0:
                         progress_percentage = (fetched_records / total_records * 100)
                     else:
                         progress_percentage = 0
+                    if conf.get('csvColumn'):
+                        csv_column_text = f'{csv_column_text}'
+                    else:
+                        csv_column_text = ''
                     message_text = (
-                        f"🔔 Batch Process Notification 🔔\n"
+                        f"Batch Process {dag_id} for {data_dt} Started at {format_thai_time(start_time)}\n\n"
                         f"Batch Name: {dag_id}\n"
                         f"Run ID: {run_id}\n"
-                        f"Start Time: {format_thai_time(start_time)}\n"
-                        f"Status: Resuming from {previous_state}\n\n"
+                        f"Resume Time: {format_thai_time(start_time)}\n"
+                        f"Status: Resuming from {previous_status}\n\n"
                         
                         f"Previous Progress\n"
                         f"\t• Records Processed: {fetched_records:,} {f'/ {total_records:,}' if total_records else ''} \n"
                         f"\t• Progress: {progress_percentage:.2f}%\n"
                         f"\t• Last Updated: {format_thai_time(last_updated) if last_updated else 'Unknown'}\n\n"
                         
-                        f"🛠️Batch Configuration🛠️\n"
+                        f"Batch Configuration\n"
                         f"Start Date: {conf.get('startDate', 'Not specified')}\n"
-                        f"End Date: {conf.get('startDate', 'Not specified')}\n"
-                        f"{csv_column_text}\n\n"
+                        f"End Date: {conf.get('endDate', 'Not specified')}\n"
+                        f"{csv_column_text}"
                     )
                 else:
                     raise ValueError(f"Unsupported notification type: {notification_type}")
@@ -709,7 +751,7 @@ def send_success_notification(default_emails, slack_webhook=None, **context):
         start_time = datetime.fromisoformat(start_time_str)
     
     current_time = get_thai_time()
-    
+    remote_path = ti.xcom_pull(key='remote_path', task_ids='uploadtoFTP')
     subject = f"Batch Process {dag_id} for {data_dt} Completed Successfully"
     html_content = format_success_message(
         dag_id, 
@@ -720,13 +762,14 @@ def send_success_notification(default_emails, slack_webhook=None, **context):
         control_filename,
         batch_state,
         data_dt,
-        ftp_status
+        ftp_status,
+        remote_path=remote_path
     )
     
     if conf.get('emailSuccess'):
-        send_notification(subject, html_content, conf, 'success', default_emails, slack_webhook, context,current_time=current_time)
+        send_notification(subject, html_content, conf, 'success', default_emails, slack_webhook, context,current_time=current_time,remote_path=remote_path)
     else:
-        send_notification(subject, html_content, conf, 'normal', default_emails, slack_webhook, context,current_time=current_time)
+        send_notification(subject, html_content, conf, 'normal', default_emails, slack_webhook, context,current_time=current_time,remote_path=remote_path)
 
 def is_manual_pause(error_message: Optional[str]) -> bool:
     """
