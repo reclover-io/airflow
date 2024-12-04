@@ -9,7 +9,6 @@ from components.database import save_batch_state
 
 from components.database import get_batch_state , get_initial_start_time
 from components.utils import get_thai_time
-from components.slack_notifications import *
 from components.line_notification import *
 
 
