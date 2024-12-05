@@ -41,7 +41,8 @@ class NoDataException(Exception):
 @contextmanager
 def handle_termination(batch_id: str, run_id: str, start_date: str, end_date: str, 
                       page: int, search_after: Optional[List[str]], 
-                      total_records: Optional[int], fetched_count: int):
+                      total_records: Optional[int], fetched_count: int, final_filename_csv: str,
+                      final_filename_ctrl: str):
     """
     Context manager to handle graceful termination
     """
@@ -72,8 +73,8 @@ def handle_termination(batch_id: str, run_id: str, start_date: str, end_date: st
                 run_id=run_id,
                 start_date=start_date,
                 end_date=end_date,
-                csv_filename=None,
-                ctrl_filename=None,
+                csv_filename=final_filename_csv,
+                ctrl_filename=final_filename_ctrl,
                 current_page=page,
                 last_search_after=search_after,
                 status='FAILED',
@@ -168,21 +169,33 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
             print(f"Removed existing temp file: {temp_file_path}")
     
     try:
+
+        thai_time = get_thai_time()
+        final_filename = get_formatted_filename(filename_template, dag_id, thai_time)
+        final_filename_csv = final_filename + '.csv'
+        final_filename_ctrl = final_filename + '.ctrl'
+
+        if batch_state:
+            # กรณีที่มี state อยู่แล้ว ใช้ชื่อไฟล์จาก state
+            final_filename_csv = batch_state.get('csv_filename', final_filename_csv)
+            final_filename_ctrl = batch_state.get('ctrl_filename', final_filename_ctrl)
         
-        save_batch_state(
-            batch_id=dag_id,
-            run_id=run_id,
-            start_date=start_date,
-            end_date=end_date,
-            csv_filename=None,
-            ctrl_filename=None,
-            current_page=page,
-            last_search_after=search_after,
-            status='RUNNING',
-            error_message=None,
-            total_records=total_records,
-            fetched_records=fetched_count
-        )
+        else:
+            # กรณีเริ่มใหม่ บันทึกชื่อไฟล์ลง state
+            save_batch_state(
+                batch_id=dag_id,
+                run_id=run_id,
+                start_date=start_date,
+                end_date=end_date,
+                csv_filename=final_filename_csv,
+                ctrl_filename=final_filename_ctrl,
+                current_page=page,
+                last_search_after=search_after,
+                status='RUNNING',
+                error_message=None,
+                total_records=total_records,
+                fetched_records=fetched_count
+            )
         
         while True:
             with handle_termination(
@@ -193,7 +206,9 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
                 page=page,
                 search_after=search_after,
                 total_records=total_records,
-                fetched_count=fetched_count
+                fetched_count=fetched_count,
+                final_filename_csv=final_filename_csv,
+                final_filename_ctrl=final_filename_ctrl
             ) as termination:
 
                 
@@ -207,8 +222,8 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
                         run_id=run_id,
                         start_date=start_date,
                         end_date=end_date,
-                        csv_filename=None,
-                        ctrl_filename=None,
+                        csv_filename=final_filename_csv,
+                        ctrl_filename=final_filename_ctrl,
                         current_page=page,
                         last_search_after=search_after,
                         status='FAILED',
@@ -244,8 +259,8 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
                             run_id=run_id,
                             start_date=start_date,
                             end_date=end_date,
-                            csv_filename=None,
-                            ctrl_filename=None,
+                            csv_filename=final_filename_csv,
+                            ctrl_filename=final_filename_ctrl,
                             current_page=page,
                             last_search_after=search_after,
                             status='FAILED',
@@ -267,8 +282,8 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
                         run_id=run_id,
                         start_date=start_date,
                         end_date=end_date,
-                        csv_filename=None,
-                        ctrl_filename=None,
+                        csv_filename=final_filename_csv,
+                        ctrl_filename=final_filename_ctrl,
                         current_page=page,
                         last_search_after=next_search_after,
                         status='RUNNING',
@@ -291,10 +306,10 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
                 search_after = next_search_after
                 page += 1
         
-        thai_time = get_thai_time()
-        final_filename = get_formatted_filename(filename_template, dag_id, thai_time)
-        final_filename_csv = final_filename + '.csv'
-        final_filename_ctrl = final_filename + '.ctrl'
+        # thai_time = get_thai_time()
+        # final_filename = get_formatted_filename(filename_template, dag_id, thai_time)
+        # final_filename_csv = final_filename + '.csv'
+        # final_filename_ctrl = final_filename + '.ctrl'
 
         final_path = os.path.join(output_path, final_filename_csv)
 
@@ -335,8 +350,8 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
             run_id=run_id,
             start_date=start_date,
             end_date=end_date,
-            csv_filename=None,
-            ctrl_filename=None,
+            csv_filename=final_filename_csv,
+            ctrl_filename=final_filename_ctrl,
             current_page=page,
             last_search_after=search_after,
             status='FAILED',
@@ -349,6 +364,10 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
 def process_data(API_URL: str, TEMP_DIR: str, OUTPUT_DIR: str,CONTROL_DIR: str, API_HEADERS: Dict[str, str], DEFAULT_CSV_COLUMNS: List[str], default_emails: Dict[str, List[str]], slack_webhook: Optional[str] = None, **kwargs):
     """Process the data and handle notifications""" 
     try:
+        from airflow.models import TaskInstance
+        from airflow.utils.session import create_session
+        from airflow.utils.state import State
+
         ti = kwargs['task_instance']
         dag_run = kwargs['dag_run']
         conf = dag_run.conf or {}
@@ -358,27 +377,39 @@ def process_data(API_URL: str, TEMP_DIR: str, OUTPUT_DIR: str,CONTROL_DIR: str, 
         run_id = dag_run.run_id
 
         batch_state = get_batch_state(dag_run.dag_id, run_id)
-        if (batch_state and 
-            batch_state.get('csv_filename') and 
-            batch_state.get('ctrl_filename')):
-            # print(f"Batch {run_id} was already completed successfully. Skipping process_data.")
+        with create_session() as session:
+            task_instance = session.query(TaskInstance).filter(
+                TaskInstance.dag_id == dag_run.dag_id,
+                TaskInstance.task_id == 'process_data',
+                TaskInstance.run_id == dag_run.run_id
+            ).first()
 
-            # ดึงข้อมูลไฟล์เดิม
-            csv_filename = batch_state.get('csv_filename')
-            control_filename = batch_state.get('ctrl_filename')
-            csv_path = os.path.join(OUTPUT_DIR, f"{csv_filename}")
-            control_path = os.path.join(OUTPUT_DIR, f"{control_filename}")
+            if (task_instance and 
+                task_instance.state == State.SUCCESS and 
+                task_instance.try_number > 1):  # เช็คว่าไม่ใช่การรันครั้งแรก
 
-            if csv_filename and control_filename:
-                # ส่งค่าที่จำเป็นผ่าน XCom
-                ti.xcom_push(key='output_filename', value=csv_filename)
-                ti.xcom_push(key='control_filename', value=control_filename)
-                # ส่งค่าpath และ filename กลับเหมือนการทำงานปกติ
-                return (csv_path, csv_filename, control_path, control_filename)
-            else:
-                error_msg = f"Batch {run_id} is marked as COMPLETED but missing file information"
-                ti.xcom_push(key='error_message', value=error_msg)
-                raise AirflowException(error_msg)
+                
+                if (batch_state and 
+                    batch_state.get('csv_filename') and 
+                    batch_state.get('ctrl_filename')):
+                    # print(f"Batch {run_id} was already completed successfully. Skipping process_data.")
+
+                    # ดึงข้อมูลไฟล์เดิม
+                    csv_filename = batch_state.get('csv_filename')
+                    control_filename = batch_state.get('ctrl_filename')
+                    csv_path = os.path.join(OUTPUT_DIR, f"{csv_filename}")
+                    control_path = os.path.join(OUTPUT_DIR, f"{control_filename}")
+
+                    if csv_filename and control_filename:
+                        # ส่งค่าที่จำเป็นผ่าน XCom
+                        ti.xcom_push(key='output_filename', value=csv_filename)
+                        ti.xcom_push(key='control_filename', value=control_filename)
+                        # ส่งค่าpath และ filename กลับเหมือนการทำงานปกติ
+                        return (csv_path, csv_filename, control_path, control_filename)
+                    else:
+                        error_msg = f"Batch {run_id} is marked as COMPLETED but missing file information"
+                        ti.xcom_push(key='error_message', value=error_msg)
+                        raise AirflowException(error_msg)
         
         print(f"Processing with parameters: start_date={start_date}, "
               f"end_date={end_date}, run_id={run_id}")
@@ -406,13 +437,12 @@ def process_data(API_URL: str, TEMP_DIR: str, OUTPUT_DIR: str,CONTROL_DIR: str, 
                 return result
             
             output_path, csv_filename = result
-            csv_filename_final = csv_filename + '.csv'
-            ctrl_filename_final = csv_filename + '.ctrl'    
+
+            csv_filename_final = batch_state.get('csv_filename')
+            ctrl_filename_final = batch_state.get('ctrl_filename')    
             ti.xcom_push(key='output_filename', value=csv_filename_final)
             ti.xcom_push(key='control_filename', value=ctrl_filename_final)
             
-            # Get batch state for total records
-            batch_state = get_batch_state(dag_run.dag_id, run_id)
             total_records = batch_state.get('total_records', 0) if batch_state else 0
             
             # Create control file

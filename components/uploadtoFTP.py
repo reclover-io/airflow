@@ -7,38 +7,47 @@ from components.database import (
     get_batch_state, 
     save_batch_state,
 )
+import time
 
 
-def run_lftp(host, username, password, local_file, remote_path, local_file_ctrl, remote_path_ctrl):
+def run_lftp(host, username, password, local_file, remote_path, local_file_ctrl, remote_path_ctrl, ti=None):
     """
     Connect to an FTPS server using lftp and upload files.
     """
     #  mkdir -p /10.250.1.101/ELK/daily/source_data/landing/ELK_MobileApp_Activity_Logs/
     lftp_command = f"""
-    lftp -u {username},{password} ftp://{host} <<EOF
-    set ssl:verify-certificate no
-   
+    lftp -e "set net:timeout 5; set ssl:verify-certificate no" -u {username},{password} ftp://{host} <<EOF
     put {local_file} -o {remote_path}
     put {local_file_ctrl} -o {remote_path_ctrl}
     bye
     EOF
     """
     try:
-        result = subprocess.run(
+        result = subprocess.Popen(
             lftp_command,
             shell=True,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True
         )
         
+        for line in iter(result.stdout.readline, ''):
+            print(f"STDOUT: {line.strip()}")
+        for line in iter(result.stderr.readline, ''):
+            print(f"STDERR: {line.strip()}")
 
         # Check return code
+        print("resultttttttttttttttttttt:",result.returncode)
         if result.returncode != 0:
-            raise AirflowException(f"lftp failed with return code {result.returncode}: {result.stderr}")
+            error_msg = f"Upload file to FTP Server failed because failed to connect to FTP Server."
+            ti.xcom_push(key='error_message', value=error_msg)
+            raise AirflowException(error_msg)
 
         print(f"Files uploaded successfully to {remote_path} and {remote_path_ctrl}.")
 
     except Exception as e:
+        error_msg = f"Upload file to FTP Server failed because failed to connect to FTP Server."
+        ti.xcom_push(key='error_message', value=error_msg)
         raise AirflowException(f"Upload file to FTP Server failed because failed to connect to FTP Server.")
 
 
@@ -82,6 +91,7 @@ def upload_csv_ctrl_to_ftp_server(default_emails: Dict[str, List[str]],
         csv_local_file_path = f'/opt/airflow/data/batch/{dag_id}/{output_filename_csv}'
         ctrl_local_file_path = f'/opt/airflow/data/batch/{dag_id}/{output_filename_ctrl}'
 
+        #time.sleep(20)
         # Verify local files exist
         if not os.path.exists(csv_local_file_path) or not os.path.exists(ctrl_local_file_path):
             print(f"CSV file not found: {csv_local_file_path} and Control file: {ctrl_local_file_path}")
@@ -106,13 +116,14 @@ def upload_csv_ctrl_to_ftp_server(default_emails: Dict[str, List[str]],
         # Run lftp to upload files
         print(f"Starting upload of {csv_local_file_path} and {ctrl_local_file_path}...")
         run_lftp(
-            host='34.124.138.144',
+            host='34.124.138.145',
             username='airflow',
             password='airflow',
             local_file=csv_local_file_path,
             remote_path=csv_remote_path,
             local_file_ctrl=ctrl_local_file_path,
-            remote_path_ctrl=ctrl_remote_path
+            remote_path_ctrl=ctrl_remote_path,
+            ti=ti
         )
 
         save_batch_state(
@@ -137,7 +148,7 @@ def upload_csv_ctrl_to_ftp_server(default_emails: Dict[str, List[str]],
 
     except Exception as e:
         # General error handling
-        error_msg = f"Upload file to FTP Server failed because failed to connect to FTP Server."
+        error_msg = ti.xcom_pull(key='error_message')
         print(f"FTPS connection error: {str(e)}")
         print(error_msg)
 

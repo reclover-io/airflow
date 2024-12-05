@@ -668,11 +668,17 @@ def send_failure_notification(default_emails, slack_webhook=None, **context):
         data_dt = None
     
     if is_manual_pause(error_message):
+        batch_state = get_batch_state(dag_id, run_id)
+        final_filename_csv = batch_state.get('csv_filename')
+        final_filename_ctrl = batch_state.get('ctrl_filename')
+        print("Finallllllllllllllllllllll:",final_filename_csv)
         save_batch_state(
             batch_id=dag_id,
             run_id=run_id,
             start_date=conf.get('startDate'),
             end_date=conf.get('endDate'),
+            csv_filename=final_filename_csv,
+            ctrl_filename=final_filename_ctrl,
             current_page=batch_state.get('current_page', 1) if batch_state else 1,
             last_search_after=batch_state.get('last_search_after') if batch_state else None,
             status='PAUSED',
