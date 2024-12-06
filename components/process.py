@@ -5,6 +5,7 @@ import shutil
 import os
 import signal
 from contextlib import contextmanager
+import time
 
 from components.database import (
     get_batch_state, 
@@ -144,8 +145,6 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
 
         print(f"Resuming from state {state_status} at page {page} with {fetched_count} records already fetched")
         print(f"Last search after: {search_after}")
-        
-        page += 1
 
         if os.path.exists(temp_file_path):
             print(f"Found existing temp file: {temp_file_path}")
@@ -304,7 +303,7 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
                     break
                     
                 search_after = next_search_after
-                page += 1
+                page = (fetched_count // PAGE_SIZE) + 1
         
         # thai_time = get_thai_time()
         # final_filename = get_formatted_filename(filename_template, dag_id, thai_time)
@@ -364,10 +363,6 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
 def process_data(API_URL: str, TEMP_DIR: str, OUTPUT_DIR: str,CONTROL_DIR: str, API_HEADERS: Dict[str, str], DEFAULT_CSV_COLUMNS: List[str], default_emails: Dict[str, List[str]], slack_webhook: Optional[str] = None, **kwargs):
     """Process the data and handle notifications""" 
     try:
-        from airflow.models import TaskInstance
-        from airflow.utils.session import create_session
-        from airflow.utils.state import State
-
         ti = kwargs['task_instance']
         dag_run = kwargs['dag_run']
         conf = dag_run.conf or {}
@@ -377,39 +372,30 @@ def process_data(API_URL: str, TEMP_DIR: str, OUTPUT_DIR: str,CONTROL_DIR: str, 
         run_id = dag_run.run_id
 
         batch_state = get_batch_state(dag_run.dag_id, run_id)
-        with create_session() as session:
-            task_instance = session.query(TaskInstance).filter(
-                TaskInstance.dag_id == dag_run.dag_id,
-                TaskInstance.task_id == 'process_data',
-                TaskInstance.run_id == dag_run.run_id
-            ).first()
+        if batch_state:
+            total_records = batch_state.get('total_records')
+            fetched_records = batch_state.get('fetched_records')
 
-            if (task_instance and 
-                task_instance.state == State.SUCCESS and 
-                task_instance.try_number > 1):  # เช็คว่าไม่ใช่การรันครั้งแรก
+            if fetched_records == total_records:
+                print(f"Batch {run_id} was already completed successfully. Skipping process_data.")
 
-                
-                if (batch_state and 
-                    batch_state.get('csv_filename') and 
-                    batch_state.get('ctrl_filename')):
-                    # print(f"Batch {run_id} was already completed successfully. Skipping process_data.")
+                # ดึงข้อมูลไฟล์เดิม
+                csv_filename = batch_state.get('csv_filename')
+                control_filename = batch_state.get('ctrl_filename')
+                csv_path = os.path.join(OUTPUT_DIR, f"{csv_filename}")
+                control_path = os.path.join(OUTPUT_DIR, f"{control_filename}")
 
-                    # ดึงข้อมูลไฟล์เดิม
-                    csv_filename = batch_state.get('csv_filename')
-                    control_filename = batch_state.get('ctrl_filename')
-                    csv_path = os.path.join(OUTPUT_DIR, f"{csv_filename}")
-                    control_path = os.path.join(OUTPUT_DIR, f"{control_filename}")
-
-                    if csv_filename and control_filename:
-                        # ส่งค่าที่จำเป็นผ่าน XCom
-                        ti.xcom_push(key='output_filename', value=csv_filename)
-                        ti.xcom_push(key='control_filename', value=control_filename)
-                        # ส่งค่าpath และ filename กลับเหมือนการทำงานปกติ
-                        return (csv_path, csv_filename, control_path, control_filename)
-                    else:
-                        error_msg = f"Batch {run_id} is marked as COMPLETED but missing file information"
-                        ti.xcom_push(key='error_message', value=error_msg)
-                        raise AirflowException(error_msg)
+                if csv_filename and control_filename:
+                    # ส่งค่าที่จำเป็นผ่าน XCom
+                    ti.xcom_push(key='output_filename', value=csv_filename)
+                    ti.xcom_push(key='control_filename', value=control_filename)
+                    # ส่งค่าpath และ filename กลับเหมือนการทำงานปกติ
+                    return (csv_path, csv_filename, control_path, control_filename)
+                    
+                else:
+                    error_msg = f"Batch {run_id} is marked as COMPLETED but missing file information"
+                    ti.xcom_push(key='error_message', value=error_msg)
+                    raise AirflowException(error_msg)
         
         print(f"Processing with parameters: start_date={start_date}, "
               f"end_date={end_date}, run_id={run_id}")
@@ -437,7 +423,7 @@ def process_data(API_URL: str, TEMP_DIR: str, OUTPUT_DIR: str,CONTROL_DIR: str, 
                 return result
             
             output_path, csv_filename = result
-
+            batch_state = get_batch_state(dag_run.dag_id, run_id)
             csv_filename_final = batch_state.get('csv_filename')
             ctrl_filename_final = batch_state.get('ctrl_filename')    
             ti.xcom_push(key='output_filename', value=csv_filename_final)

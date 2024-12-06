@@ -554,6 +554,7 @@ def send_running_notification(default_emails, slack_webhook=None, **context):
     
     previous_state = get_batch_state(dag_id, run_id)
     is_resume = previous_state is not None
+    print(f"Resume status: {is_resume}")
 
     start_date = conf.get('startDate')
     start_date_dt = datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S.%f')
@@ -671,7 +672,6 @@ def send_failure_notification(default_emails, slack_webhook=None, **context):
         batch_state = get_batch_state(dag_id, run_id)
         final_filename_csv = batch_state.get('csv_filename')
         final_filename_ctrl = batch_state.get('ctrl_filename')
-        print("Finallllllllllllllllllllll:",final_filename_csv)
         save_batch_state(
             batch_id=dag_id,
             run_id=run_id,

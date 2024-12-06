@@ -16,28 +16,22 @@ def run_lftp(host, username, password, local_file, remote_path, local_file_ctrl,
     """
     #  mkdir -p /10.250.1.101/ELK/daily/source_data/landing/ELK_MobileApp_Activity_Logs/
     lftp_command = f"""
-    lftp -e "set net:timeout 5; set ssl:verify-certificate no" -u {username},{password} ftp://{host} <<EOF
+    lftp -u {username},{password} ftp://{host} <<EOF
+    set ssl:verify-certificate no
+   
     put {local_file} -o {remote_path}
     put {local_file_ctrl} -o {remote_path_ctrl}
     bye
     EOF
     """
     try:
-        result = subprocess.Popen(
+        result = subprocess.run(
             lftp_command,
             shell=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True
         )
-        
-        for line in iter(result.stdout.readline, ''):
-            print(f"STDOUT: {line.strip()}")
-        for line in iter(result.stderr.readline, ''):
-            print(f"STDERR: {line.strip()}")
 
-        # Check return code
-        print("resultttttttttttttttttttt:",result.returncode)
         if result.returncode != 0:
             error_msg = f"Upload file to FTP Server failed because failed to connect to FTP Server."
             ti.xcom_push(key='error_message', value=error_msg)
