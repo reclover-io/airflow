@@ -7,9 +7,10 @@ from components.database import (
     get_batch_state, 
     save_batch_state,
 )
+import time
 
 
-def run_lftp(host, username, password, local_file, remote_path, local_file_ctrl, remote_path_ctrl):
+def run_lftp(host, username, password, local_file, remote_path, local_file_ctrl, remote_path_ctrl, ti=None):
     """
     Connect to an FTPS server using lftp and upload files.
     """
@@ -30,15 +31,17 @@ def run_lftp(host, username, password, local_file, remote_path, local_file_ctrl,
             capture_output=True,
             text=True
         )
-        
 
-        # Check return code
         if result.returncode != 0:
-            raise AirflowException(f"lftp failed with return code {result.returncode}: {result.stderr}")
+            error_msg = f"Upload file to FTP Server failed because failed to connect to FTP Server."
+            ti.xcom_push(key='error_message', value=error_msg)
+            raise AirflowException(error_msg)
 
         print(f"Files uploaded successfully to {remote_path} and {remote_path_ctrl}.")
 
     except Exception as e:
+        error_msg = f"Upload file to FTP Server failed because failed to connect to FTP Server."
+        ti.xcom_push(key='error_message', value=error_msg)
         raise AirflowException(f"Upload file to FTP Server failed because failed to connect to FTP Server.")
 
 
@@ -82,6 +85,7 @@ def upload_csv_ctrl_to_ftp_server(default_emails: Dict[str, List[str]],
         csv_local_file_path = f'/opt/airflow/data/batch/{dag_id}/{output_filename_csv}'
         ctrl_local_file_path = f'/opt/airflow/data/batch/{dag_id}/{output_filename_ctrl}'
 
+        #time.sleep(20)
         # Verify local files exist
         if not os.path.exists(csv_local_file_path) or not os.path.exists(ctrl_local_file_path):
             print(f"CSV file not found: {csv_local_file_path} and Control file: {ctrl_local_file_path}")
@@ -106,13 +110,14 @@ def upload_csv_ctrl_to_ftp_server(default_emails: Dict[str, List[str]],
         # Run lftp to upload files
         print(f"Starting upload of {csv_local_file_path} and {ctrl_local_file_path}...")
         run_lftp(
-            host='34.124.138.144',
+            host='34.124.138.145',
             username='airflow',
             password='airflow',
             local_file=csv_local_file_path,
             remote_path=csv_remote_path,
             local_file_ctrl=ctrl_local_file_path,
-            remote_path_ctrl=ctrl_remote_path
+            remote_path_ctrl=ctrl_remote_path,
+            ti=ti
         )
 
         save_batch_state(
@@ -137,7 +142,7 @@ def upload_csv_ctrl_to_ftp_server(default_emails: Dict[str, List[str]],
 
     except Exception as e:
         # General error handling
-        error_msg = f"Upload file to FTP Server failed because failed to connect to FTP Server."
+        error_msg = ti.xcom_pull(key='error_message')
         print(f"FTPS connection error: {str(e)}")
         print(error_msg)
 
