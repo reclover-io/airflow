@@ -9,7 +9,8 @@ from components.database import save_batch_state
 
 from components.database import get_batch_state , get_initial_start_time
 from components.utils import get_thai_time
-from components.slack_notifications import *
+from components.line_notification import *
+
 
 
 def format_thai_time(dt: datetime) -> str:
@@ -400,6 +401,14 @@ def send_email_notification(to: List[str], subject: str, html_content: str):
         error_msg = f"Failed to send email to {to}: {str(e)}"
         print(f"Failed to send email: {str(e)}")
         raise AirflowException(error_msg)
+    
+def get_csv_column_text(conf: Dict) -> str:
+    """
+    Generate the text for CSV Columns if they exist in the configuration.
+    """
+    if 'csvColumn' in conf and conf['csvColumn']:
+        return f"   • CSV Column: [ {', '.join(conf['csvColumn'])} ]\n"
+    return ""
 
 def send_notification(
     subject: str, 
@@ -412,19 +421,20 @@ def send_notification(
     current_time: Optional[datetime] = None,
     retry_count: Optional[int] = None,
     max_retries: Optional[int] = None,
-    previous_state: Optional[Dict] = None, **kwargs
+    previous_state: Optional[Dict] = None, **kwargs 
     
 ):
     """Send notification to appropriate recipients based on type"""
 
     email_sent = False
-    slack_sent = False
     errors = []
     ti = context['task_instance']
     dag_run = context['dag_run']
     dag_id = dag_run.dag_id
     run_id = dag_run.run_id
     conf = dag_run.conf or {}
+    csv_column_text = get_csv_column_text(conf)
+    end_time = current_time
 
     recipients = get_notification_recipients(conf, notification_type, default_emails)
     if recipients:
@@ -437,107 +447,233 @@ def send_notification(
             error_msg = f"Failed to send email notification: {str(e)}"
             print(f"Failed to send email {notification_type} notification: {str(e)}")
             errors.append(error_msg)
-        
-    should_slack = ti.xcom_pull(key='should_slack', task_ids='validate_input')
-
-    if should_slack:
-        if slack_webhook and context:
+    
+    # ตรวจสอบว่าควรส่ง LINE หรือไม่
+    should_line = False
+    
+    if should_line:
+        if context:
             try:
-                dag_run = context['dag_run']
-                ti = context['task_instance']
-                
                 batch_state = get_batch_state(dag_run.dag_id, dag_run.run_id)
-                
                 start_time_str = ti.xcom_pull(key='batch_start_time')
                 start_time = datetime.fromisoformat(start_time_str) if start_time_str else get_thai_time()
-
-                notifier = SlackNotifier(slack_webhook)
-
+                start_date = conf.get('startDate')
+                start_date_dt = datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S.%f')
+                data_dt = start_date_dt.strftime('%Y-%m-%d')
+                # เรียกฟังก์ชัน LINE ตามประเภทของ notification
+                if conf.get('csvColumn'):
+                    csv_column_text = f'{csv_column_text}'
+                else:
+                    csv_column_text = ''
                 if notification_type == "start":
-                    slack_message = create_slack_running_message(
-                        dag_id=dag_run.dag_id,
-                        run_id=dag_run.run_id,
-                        start_time=start_time,
-                        conf=conf
+                    message_text = (
+                        f"Batch Process {dag_id} for {data_dt} Started at {format_thai_time(start_time)}\n\n"
+                        f"Batch Name: {dag_id}\n"
+                        f"Run ID: {run_id}\n"
+                        f"Start Time: {format_thai_time(start_time)}\n"
+                        f"Status: Starting New Process\n\n"
+                        
+                        f"Batch Configuration\n"
+                        f"Start Date: {conf.get('startDate', 'Not specified')}\n"
+                        f"End Date: {conf.get('endDate', 'Not specified')}\n"
+                        f"{csv_column_text}"
                     )
-
-                elif notification_type == "success" or notification_type == "SUCCESS" or notification_type == "normal":
-                    csv_filename = ti.xcom_pull(key='output_filename')
-                    control_filename = ti.xcom_pull(key='control_filename', default='Not available')
-                    slack_message = create_slack_success_message(
-                        dag_id=dag_run.dag_id,
-                        run_id=dag_run.run_id,
-                        start_time=start_time,
-                        end_time=current_time,
-                        conf=conf,
-                        csv_filename=ti.xcom_pull(key='output_filename'),
-                        control_filename=ti.xcom_pull(key='control_filename', default='Not available'),
-                        batch_state=batch_state,
+                elif notification_type in ["success", "SUCCESS", "normal"]:
+                    csv_filename=ti.xcom_pull(key='output_filename'),
+                    control_filename=ti.xcom_pull(key='control_filename', default='Not available'),
+                    start_time = get_initial_start_time(dag_id, run_id)
+                    fetched_records = batch_state.get('fetched_records', 0)
+                    start_date = conf.get('startDate')
+                    start_date_dt = datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S.%f')
+                    data_dt = start_date_dt.strftime('%Y-%m-%d')
+                    elapsed_time = end_time - start_time
+                    hours, remainder = divmod(int(elapsed_time.total_seconds()), 3600)
+                    minutes, seconds = divmod(remainder, 60)
+                    elapsed_str = f"{hours}h {minutes}m {seconds}s"
+                    remote_path = kwargs.get('remote_path')
+                    ftp_path = (
+                        f"ftps:/{remote_path}"
+                            if conf.get("ftp") else
+                        f"/data/airflow/data/{dag_id}"
                     )
-                    
+                    message_text = (
+                        f"Batch Process {dag_id} for {data_dt} Completed Successfully\n\n"
+                        f"Batch Name: {dag_id}\n"
+                        f"Run ID: {run_id}\n"
+                        f"Start Time: {format_thai_time(start_time)}\n"
+                        f"End Time: {format_thai_time(current_time)}\n"
+                        f"Total Elapsed Time: {elapsed_str}\n"
+                        f"Status: Completed\n\n"
+                        
+                        f"Processing Summary\n"
+                        f"\t• Total Records Processed: {fetched_records}\n"
+                        f"\t• Data Date Time: {data_dt} \n\n"
+                        
+                        f"Output Information\n"
+                        f"Path: {ftp_path}\n"
+                        f"\t• CSV Filename: {csv_filename}\n"
+                        f"\t• Control Filename: {control_filename}\n\n"
+                        
+                    )
                 elif notification_type == "fail" and retry_count and max_retries:
                     error_message = ti.xcom_pull(key='error_message', default='Unknown error')
-                    slack_message = create_slack_retry_message(
-                        title=subject,
-                        dag_id=dag_run.dag_id,
-                        run_id=dag_run.run_id,
-                        retry_count=retry_count,
-                        max_retries=max_retries,
-                        current_time=current_time,
-                        error_message=error_message,
-                        conf=conf,
-                        batch_state=batch_state
-                    )
+                    fetched_records = batch_state.get('fetched_records', 0)
+                    total_records = batch_state.get('total_records')
+                    current_page = batch_state.get('current_page', 1)
+                    start_date = conf.get('startDate')
+                    start_date_dt = datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S.%f')
+                    data_dt = start_date_dt.strftime('%Y-%m-%d')
+                    if total_records and total_records > 0:
+                        progress_percentage = (fetched_records / total_records * 100)
+                    else:
+                        progress_percentage = 0
+                    message_text = (
+                        f"Batch Process {dag_id} for {data_dt} Failed - Retry {retry_count}/{max_retries} \n\n"
+                        f"Batch Name: {dag_id}\n"
+                        f"Run ID: {run_id}\n"
+                        f"Time: {format_thai_time(current_time)}\n"
+                        f"Status: Retry {retry_count} of {max_retries}\n"
+                        f"Error Message: {error_message}\n\n"
 
+                        f"Progress Information\n"
+                        f"\t• Records Processed: {fetched_records:,} {f'/ {total_records:,}' if total_records else ''} \n"
+                        f"\t• Progress: {progress_percentage:.2f}%\n"
+                        f"\t• Current Page: {current_page}\n\n"
+    
+                        f"Note: System will automatically retry the process."
+                    )
                 elif notification_type == "fail":
                     error_message = ti.xcom_pull(key='error_message', default='Unknown error')
-                    slack_message = create_slack_err_message(
-                        title=subject,
-                        dag_id=dag_run.dag_id,
-                        run_id=dag_run.run_id,
-                        start_time=start_time,
-                        end_time=current_time,
-                        error_message=error_message,
-                        conf=conf,
-                        batch_state=batch_state
+                    elapsed_time = end_time - start_time
+                    hours, remainder = divmod(int(elapsed_time.total_seconds()), 3600)
+                    minutes, seconds = divmod(remainder, 60)
+                    elapsed_str = f"{hours}h {minutes}m {seconds}s"
+                    fetched_records = batch_state.get('fetched_records', 0)
+                    total_records = batch_state.get('total_records')
+                    current_page = batch_state.get('current_page', 1)
+                    start_date = conf.get('startDate')
+                    start_date_dt = datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S.%f')
+                    data_dt = start_date_dt.strftime('%Y-%m-%d')
+                    
+                    if total_records and total_records > 0:
+                        progress_percentage = (fetched_records / total_records * 100)
+                    else:
+                        progress_percentage = 0
+                    if conf.get('csvColumn'):
+                        csv_column_text = f'{csv_column_text}'
+                    else:
+                        csv_column_text = ''
+                    message_text = (
+                        f"Batch Process {dag_id} for {data_dt} Failed\n\n"
+                        f"Batch Name: {dag_id}\n"
+                        f"Run ID: {run_id}\n"
+                        f"Start Time: {format_thai_time(start_time)}\n"
+                        f"End Time: {format_thai_time(end_time)}\n"
+                        f"Elapsed Time: {elapsed_str}\n"
+                        f"Status: Failed\n"
+                        f"Error Message: {error_message}\n\n"
+                        
+                        f"Progress Information\n"
+                        f"\t• Records Processed: {fetched_records:,} {f'/ {total_records:,}' if total_records else ''} \n"
+                        f"\t• Progress: {progress_percentage:.2f}%\n"
+                        f"\t• Current Page: {current_page}\n\n"
+                        
+                        f"Batch Configuration\n"
+                        f"Start Date: {conf.get('startDate', 'Not specified')}\n"
+                        f"End Date: {conf.get('endDate', 'Not specified')}\n"
+                        f"{csv_column_text}"
+    
+                        f"\nNote: To resume this process, please run the batch again with the same Run ID."
                     )
-
                 elif notification_type == "pause":
-                    slack_message = create_slack_manual_pause_message(
-                        title=subject,
-                        dag_id=dag_run.dag_id,
-                        run_id=dag_run.run_id,
-                        start_time=start_time,
-                        end_time=current_time,
-                        conf=conf,
-                        batch_state=batch_state
-                    )
+                    elapsed_time = end_time - start_time
+                    hours, remainder = divmod(int(elapsed_time.total_seconds()), 3600)
+                    minutes, seconds = divmod(remainder, 60)
+                    elapsed_str = f"{hours}h {minutes}m {seconds}s"
+                    fetched_records = batch_state.get('fetched_records', 0)
+                    total_records = batch_state.get('total_records')
+                    current_page = batch_state.get('current_page', 1)
+                    start_date = conf.get('startDate')
+                    start_date_dt = datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S.%f')
+                    data_dt = start_date_dt.strftime('%Y-%m-%d')
+                    if total_records and total_records > 0:
+                        progress_percentage = (fetched_records / total_records * 100)
+                    else:
+                        progress_percentage = 0
+                    if conf.get('csvColumn'):
+                        csv_column_text = f'{csv_column_text}'
+                    else:
+                        csv_column_text = ''
+                    message_text = (
+                        f"Batch Process {dag_id} for {data_dt} Has Been Manually Paused \n"
+                        f"Batch Name: {dag_id}\n"
+                        f"Run ID: {run_id}\n"
+                        f"Start Time: {format_thai_time(start_time)}\n"
+                        f"Pause Time: {format_thai_time(end_time)}\n"
+                        f"Elapsed Time: {elapsed_str}\n"
+                        f"Status:  Manually Paused\n"
+                        f"Pause Reason: Process was manually paused by operator\n\n"
 
+                        f"Progress Information\n"
+                        f"\t• Records Processed: {fetched_records:,} {f'/ {total_records:,}' if total_records else ''} \n"
+                        f"\t• Progress: {progress_percentage:.2f}%\n"
+                        f"\t• Current Page: {current_page}\n\n"
+                        
+                        f"Batch Configuration\n"
+                        f"Start Date: {conf.get('startDate', 'Not specified')}\n"
+                        f"End Date: {conf.get('endDate', 'Not specified')}\n"
+                        f"{csv_column_text}"
+    
+                        f"\nNote: To resume this process, please run the batch again with the same Run ID."
+                    )
                 elif notification_type == "resume":
-                    slack_message = create_slack_resume_message(
-                        title=subject,
-                        dag_id=dag_run.dag_id,
-                        run_id=dag_run.run_id,
-                        start_time=start_time,
-                        conf=conf,
-                        previous_state=previous_state,
-                        batch_state=batch_state
+                    last_updated = previous_state.get('updated_at')
+                    previous_status = previous_state.get('status', 'Unknown')
+                    fetched_records = batch_state.get('fetched_records', 0)
+                    total_records = batch_state.get('total_records')
+                    start_date = conf.get('startDate')
+                    start_date_dt = datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S.%f')
+                    data_dt = start_date_dt.strftime('%Y-%m-%d')
+                    if total_records and total_records > 0:
+                        progress_percentage = (fetched_records / total_records * 100)
+                    else:
+                        progress_percentage = 0
+                    if conf.get('csvColumn'):
+                        csv_column_text = f'{csv_column_text}'
+                    else:
+                        csv_column_text = ''
+                    message_text = (
+                        f"Batch Process {dag_id} for {data_dt} Started at {format_thai_time(start_time)}\n\n"
+                        f"Batch Name: {dag_id}\n"
+                        f"Run ID: {run_id}\n"
+                        f"Resume Time: {format_thai_time(start_time)}\n"
+                        f"Status: Resuming from {previous_status}\n\n"
+                        
+                        f"Previous Progress\n"
+                        f"\t• Records Processed: {fetched_records:,} {f'/ {total_records:,}' if total_records else ''} \n"
+                        f"\t• Progress: {progress_percentage:.2f}%\n"
+                        f"\t• Last Updated: {format_thai_time(last_updated) if last_updated else 'Unknown'}\n\n"
+                        
+                        f"Batch Configuration\n"
+                        f"Start Date: {conf.get('startDate', 'Not specified')}\n"
+                        f"End Date: {conf.get('endDate', 'Not specified')}\n"
+                        f"{csv_column_text}"
                     )
-
                 else:
                     raise ValueError(f"Unsupported notification type: {notification_type}")
 
-                notifier.send_message(slack_message)
-                slack_sent = True
+                line_message = create_line_text_message(message_text)
+                send_line_message(line_message)
+                line_sent = True
+                if line_sent:
+                    print("Send Line message successfully")
             except Exception as e:
-                error_msg = f"Failed to send Slack notification: {str(e)}"
-                print(f"Failed to send Slack notification: {str(e)}")
+                error_msg = f"Failed to send LINE notification: {str(e)}"
+                print(f"Failed to send LINE notification: {str(e)}")
                 errors.append(error_msg)
                 raise AirflowException(error_msg)
-        
-    # if (not email_sent and not slack_sent) or (slack_webhook and not slack_sent):
-    #     error_msg = "Failed to send notifications:\n" + "\n".join(errors)
-    #     raise AirflowException(error_msg)
+
+    # ตรวจสอบหากไม่มีการส่ง notification ใดสำเร็จ
     if (not email_sent):
         error_msg = "Failed to send notifications:\n" + "\n".join(errors)
         raise AirflowException(error_msg)
@@ -625,9 +761,9 @@ def send_success_notification(default_emails, slack_webhook=None, **context):
     )
     
     if conf.get('emailSuccess'):
-        send_notification(subject, html_content, conf, 'success', default_emails, slack_webhook, context,current_time=current_time)
+        send_notification(subject, html_content, conf, 'success', default_emails, slack_webhook, context,current_time=current_time,remote_path=remote_path)
     else:
-        send_notification(subject, html_content, conf, 'normal', default_emails, slack_webhook, context,current_time=current_time)
+        send_notification(subject, html_content, conf, 'normal', default_emails, slack_webhook, context,current_time=current_time,remote_path=remote_path)
 
 def is_manual_pause(error_message: Optional[str]) -> bool:
     """
