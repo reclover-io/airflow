@@ -512,7 +512,7 @@ def send_notification(
                         f"\t• Data Date Time: {data_dt} \n\n"
                         
                         f"Output Information\n"
-                        f"Path: {ftp_path}"
+                        f"Path: {ftp_path}\n"
                         f"\t• CSV Filename: {csv_filename}\n"
                         f"\t• Control Filename: {control_filename}\n\n"
                         
