@@ -448,9 +448,9 @@ def send_notification(
             print(f"Failed to send email {notification_type} notification: {str(e)}")
             errors.append(error_msg)
     
-        # ตรวจสอบว่าควรส่ง LINE หรือไม่
-    should_line = True
-
+    # ตรวจสอบว่าควรส่ง LINE หรือไม่
+    should_line = False
+    
     if should_line:
         if context:
             try:
@@ -483,8 +483,6 @@ def send_notification(
                     control_filename=ti.xcom_pull(key='control_filename', default='Not available'),
                     start_time = get_initial_start_time(dag_id, run_id)
                     fetched_records = batch_state.get('fetched_records', 0)
-                    range_time_start = conf.get('startDate')
-                    range_time_end = conf.get('endDate')
                     start_date = conf.get('startDate')
                     start_date_dt = datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S.%f')
                     data_dt = start_date_dt.strftime('%Y-%m-%d')
@@ -676,10 +674,6 @@ def send_notification(
                 raise AirflowException(error_msg)
 
     # ตรวจสอบหากไม่มีการส่ง notification ใดสำเร็จ
-    if not email_sent and not line_sent:
-        error_msg = "Failed to send notifications:\n" + "\n".join(errors)
-        raise AirflowException(error_msg)
-
     if (not email_sent):
         error_msg = "Failed to send notifications:\n" + "\n".join(errors)
         raise AirflowException(error_msg)
