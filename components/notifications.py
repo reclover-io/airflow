@@ -516,6 +516,12 @@ def send_notification(
                         
                     )
                 elif notification_type == "fail" and retry_count and max_retries:
+                    ti = context['task_instance']
+                    dag_run = context['dag_run']
+                    dag_id = dag_run.dag_id
+                    run_id = dag_run.run_id
+                    conf = dag_run.conf or {}
+                    batch_state = get_batch_state(dag_run.dag_id, dag_run.run_id) or {}
                     error_message = ti.xcom_pull(key='error_message', default='Unknown error')
                     fetched_records = batch_state.get('fetched_records', 0)
                     total_records = batch_state.get('total_records')
@@ -543,6 +549,12 @@ def send_notification(
                         f"Note: System will automatically retry the process."
                     )
                 elif notification_type == "fail":
+                    ti = context['task_instance']
+                    dag_run = context['dag_run']
+                    dag_id = dag_run.dag_id
+                    run_id = dag_run.run_id
+                    conf = dag_run.conf or {}
+                    batch_state = get_batch_state(dag_run.dag_id, dag_run.run_id) or {}
                     error_message = ti.xcom_pull(key='error_message', default='Unknown error')
                     elapsed_time = end_time - start_time
                     hours, remainder = divmod(int(elapsed_time.total_seconds()), 3600)
@@ -671,8 +683,10 @@ def send_notification(
                 error_msg = f"Failed to send LINE notification: {str(e)}"
                 print(f"Failed to send LINE notification: {str(e)}")
                 errors.append(error_msg)
-                raise AirflowException(error_msg)
-
+                raise AirflowException(error_msg)       
+    else:
+        print("LINE notification did not activate.")
+        
     # ตรวจสอบหากไม่มีการส่ง notification ใดสำเร็จ
     if (not email_sent):
         error_msg = "Failed to send notifications:\n" + "\n".join(errors)
