@@ -566,6 +566,16 @@ def validate_input_task_manual(default_emails, **context):
             date_errors = error_message.split('\n')
             errors.extend(date_errors)
 
+        is_valid, error_message = validate_ftp_config(conf, context)
+        if not is_valid:
+            errors.append(f"FTP Configuration Error: {error_message}")
+
+        start_run = conf.get('start_run')
+        if start_run:
+            is_valid, error_message = validate_start_run(start_run)
+            if not is_valid:
+                errors.append(f"{error_message}")
+
         if errors:
             # กรองออกข้อที่เป็นค่าว่าง
             errors = [error for error in errors if error.strip()]
