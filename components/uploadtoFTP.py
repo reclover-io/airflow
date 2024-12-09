@@ -29,7 +29,8 @@ def run_lftp(host, username, password, local_file, remote_path, local_file_ctrl,
             lftp_command,
             shell=True,
             capture_output=True,
-            text=True
+            text=True,
+            timeout=300
         )
 
         if result.returncode != 0:
@@ -38,6 +39,11 @@ def run_lftp(host, username, password, local_file, remote_path, local_file_ctrl,
             raise AirflowException(error_msg)
 
         print(f"Files uploaded successfully to {remote_path} and {remote_path_ctrl}.")
+
+    except subprocess.TimeoutExpired:
+        error_msg = "Upload file to FTP Server failed because failed to connect to FTP Server."
+        ti.xcom_push(key='error_message', value=error_msg)
+        raise AirflowException(error_msg)
 
     except Exception as e:
         error_msg = f"Upload file to FTP Server failed because failed to connect to FTP Server."
@@ -110,7 +116,7 @@ def upload_csv_ctrl_to_ftp_server(default_emails: Dict[str, List[str]],
         # Run lftp to upload files
         print(f"Starting upload of {csv_local_file_path} and {ctrl_local_file_path}...")
         run_lftp(
-            host='34.124.138.145',
+            host='34.124.138.144',
             username='airflow',
             password='airflow',
             local_file=csv_local_file_path,
