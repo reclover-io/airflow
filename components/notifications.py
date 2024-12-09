@@ -696,18 +696,18 @@ def send_running_notification(default_emails, slack_webhook=None, **context):
     start_date_dt = datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S.%f')
     data_dt = start_date_dt.strftime('%Y-%m-%d')  
     
-    if is_resume and previous_state.get('status') != 'RUNNING':
-        print(f"Found previous state with status: {previous_state.get('status')}")
-        subject = f"Batch Process {dag_id} for {data_dt} Started at {format_thai_time(start_time)}"
-        html_content = format_resume_message(dag_id, run_id, start_time, conf, previous_state)
+    # if is_resume and previous_state.get('status') != 'RUNNING':
+    #     print(f"Found previous state with status: {previous_state.get('status')}")
+    #     subject = f"Batch Process {dag_id} for {data_dt} Started at {format_thai_time(start_time)}"
+    #     html_content = format_resume_message(dag_id, run_id, start_time, conf, previous_state)
         
-        send_notification(subject, html_content, conf, 'resume', default_emails, slack_webhook, context ,None,None,None,previous_state)
-    else:
-        print("No previous state found, sending start notification")
-        subject = f"Batch Process {dag_id} for {data_dt} Started at {format_thai_time(start_time)}"
-        html_content = format_running_message(dag_id, run_id, start_time, conf)
-        
-        send_notification(subject, html_content, conf, 'start', default_emails, slack_webhook, context)
+    #     send_notification(subject, html_content, conf, 'resume', default_emails, slack_webhook, context ,None,None,None,previous_state)
+    # else:
+    #     print("No previous state found, sending start notification")
+    subject = f"Batch Process {dag_id} for {data_dt} Started at {format_thai_time(start_time)}"
+    html_content = format_running_message(dag_id, run_id, start_time, conf)
+    
+    send_notification(subject, html_content, conf, 'start', default_emails, slack_webhook, context)
 
 def send_success_notification(default_emails, slack_webhook=None, **context):
     """Send success notification"""
