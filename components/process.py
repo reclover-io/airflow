@@ -502,27 +502,29 @@ def process_data_manual(API_HEADERS,default_emails,slack_webhook,**kwargs):
         run_id = dag_run.run_id
         batch_state = get_batch_state(dag_run.dag_id, run_id)
         
-        if (batch_state and 
-            batch_state.get('csv_filename') and 
-            batch_state.get('ctrl_filename')):
-            print(f"Batch {run_id} was already completed successfully. Skipping process_data.")
+        if batch_state:
+            total_records = batch_state.get('total_records')
+            fetched_records = batch_state.get('fetched_records')
 
-            # ดึงข้อมูลไฟล์เดิม
-            csv_filename = batch_state.get('csv_filename')
-            control_filename = batch_state.get('ctrl_filename')
-            csv_path = os.path.join(OUTPUT_DIR, f"{csv_filename}.csv")
-            control_path = os.path.join(OUTPUT_DIR, f"{control_filename}")
+            if fetched_records == total_records:
+                print(f"Batch {run_id} was already completed successfully. Skipping process_data.")
 
-            if csv_filename and control_filename:
-                # ส่งค่าที่จำเป็นผ่าน XCom
-                ti.xcom_push(key='output_filename', value=csv_filename)
-                ti.xcom_push(key='control_filename', value=control_filename)
-                # ส่งค่าpath และ filename กลับเหมือนการทำงานปกติ
-                return (csv_path, csv_filename, control_path, control_filename)
-            else:
-                error_msg = f"Batch {run_id} is marked as COMPLETED but missing file information"
-                ti.xcom_push(key='error_message', value=error_msg)
-                raise AirflowException(error_msg)
+                # ดึงข้อมูลไฟล์เดิม
+                csv_filename = batch_state.get('csv_filename')
+                control_filename = batch_state.get('ctrl_filename')
+                csv_path = os.path.join(OUTPUT_DIR, f"{csv_filename}")
+                control_path = os.path.join(OUTPUT_DIR, f"{control_filename}")
+
+                if csv_filename and control_filename:
+                    # ส่งค่าที่จำเป็นผ่าน XCom
+                    ti.xcom_push(key='output_filename', value=csv_filename)
+                    ti.xcom_push(key='control_filename', value=control_filename)
+                    # ส่งค่าpath และ filename กลับเหมือนการทำงานปกติ
+                    return (csv_path, csv_filename, control_path, control_filename)
+                else:
+                    error_msg = f"Batch {run_id} is marked as COMPLETED but missing file information"
+                    ti.xcom_push(key='error_message', value=error_msg)
+                    raise AirflowException(error_msg)
         
         print(f"Processing with parameters: start_date={start_date}, "
               f"end_date={end_date}, run_id={run_id}")
@@ -550,13 +552,12 @@ def process_data_manual(API_HEADERS,default_emails,slack_webhook,**kwargs):
                 return result
             
             output_path, csv_filename = result
-            csv_filename_final = csv_filename + '.csv'
-            ctrl_filename_final = csv_filename + '.ctrl'    
+            batch_state = get_batch_state(dag_run.dag_id, run_id)
+            csv_filename_final = batch_state.get('csv_filename')
+            ctrl_filename_final = batch_state.get('ctrl_filename') 
             ti.xcom_push(key='output_filename', value=csv_filename_final)
             ti.xcom_push(key='control_filename', value=ctrl_filename_final)
             
-            # Get batch state for total records
-            batch_state = get_batch_state(dag_run.dag_id, run_id)
             total_records = batch_state.get('total_records', 0) if batch_state else 0
             
             # Create control file
