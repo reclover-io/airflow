@@ -18,7 +18,7 @@ def check_previous_failed_batch(**context):
             if run_id_conf:
                 failed_dag_runs = session.query(DagRun).filter(
                     DagRun.state == State.FAILED,
-                    DagRun.run_id.in_(run_id_conf)
+                    DagRun.run_id == run_id_conf
                 ).order_by(DagRun.execution_date.asc()).all()
 
             else:
