@@ -372,10 +372,12 @@ def validate_config(conf: Dict, DEFAULT_CSV_COLUMNS: List[str], context: Dict) -
     if not is_valid:
         errors.append(f"Email Configuration Error: {error_message}")
     
+    run_ids = conf.get('run_id')
+    if not run_ids:
     # Validate dates
-    is_valid, error_message = validate_config_dates(conf)
-    if not is_valid:
-        errors.append(f"Date Configuration Error: {error_message}")
+        is_valid, error_message = validate_config_dates(conf)
+        if not is_valid:
+            errors.append(f"Date Configuration Error: {error_message}")
     
     # Validate CSV columns
     if 'csvColumn' in conf:
@@ -399,7 +401,6 @@ def validate_config(conf: Dict, DEFAULT_CSV_COLUMNS: List[str], context: Dict) -
     if not is_valid:
         errors.append(f"FTP Configuration Error: {error_message}")
 
-    run_ids = conf.get('run_id')
     if run_ids:
         is_valid, error_message = validate_run_ids(run_ids, context['dag'].dag_id)
         if not is_valid:

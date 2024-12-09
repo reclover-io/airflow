@@ -1,6 +1,6 @@
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timedelta
-from airflow.exceptions import AirflowException
+from airflow.exceptions import AirflowException,AirflowSkipException
 import shutil
 import os
 import signal
@@ -366,6 +366,9 @@ def process_data(API_URL: str, TEMP_DIR: str, OUTPUT_DIR: str,CONTROL_DIR: str, 
         ti = kwargs['task_instance']
         dag_run = kwargs['dag_run']
         conf = dag_run.conf or {}
+        run_id_conf = conf.get('run_id', None)
+        if run_id_conf:
+            raise AirflowSkipException(f"Skipping notification because get run_id: {run_id_conf}")
         
         start_date = conf.get('startDate')
         end_date = conf.get('endDate')
@@ -474,6 +477,11 @@ def process_data(API_URL: str, TEMP_DIR: str, OUTPUT_DIR: str,CONTROL_DIR: str, 
                 )
 
             raise AirflowException(error_msg)
+        
+    except AirflowSkipException as e:
+        # Handle skipped task explicitly
+        print(e)
+        raise
             
     except Exception as e:
         error_msg = str(e)

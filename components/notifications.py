@@ -1,7 +1,7 @@
 from typing import Dict, List
 from datetime import datetime
 from airflow.utils.email import send_email
-from airflow.exceptions import AirflowException
+from airflow.exceptions import AirflowException,AirflowSkipException
 import re
 from typing import Dict, List, Optional, Tuple
 from components.constants import THAI_TZ
@@ -680,11 +680,16 @@ def send_notification(
 
 def send_running_notification(default_emails, slack_webhook=None, **context):
     """Send notification when DAG starts running or resumes"""
+    
     dag_run = context['dag_run']
     dag_id = dag_run.dag_id
     run_id = dag_run.run_id
     start_time = get_thai_time()
     conf = dag_run.conf or {}
+
+    run_id_conf = conf.get('run_id', None)
+    if run_id_conf:
+        raise AirflowSkipException(f"Skipping notification because get run_id: {run_id_conf}")
     
     context['task_instance'].xcom_push(key='batch_start_time', value=start_time.isoformat())
     
@@ -696,18 +701,18 @@ def send_running_notification(default_emails, slack_webhook=None, **context):
     start_date_dt = datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S.%f')
     data_dt = start_date_dt.strftime('%Y-%m-%d')  
     
-    if is_resume and previous_state.get('status') != 'RUNNING':
-        print(f"Found previous state with status: {previous_state.get('status')}")
-        subject = f"Batch Process {dag_id} for {data_dt} Started at {format_thai_time(start_time)}"
-        html_content = format_resume_message(dag_id, run_id, start_time, conf, previous_state)
+    # if is_resume and previous_state.get('status') != 'RUNNING':
+    #     print(f"Found previous state with status: {previous_state.get('status')}")
+    #     subject = f"Batch Process {dag_id} for {data_dt} Started at {format_thai_time(start_time)}"
+    #     html_content = format_resume_message(dag_id, run_id, start_time, conf, previous_state)
         
-        send_notification(subject, html_content, conf, 'resume', default_emails, slack_webhook, context ,None,None,None,previous_state)
-    else:
-        print("No previous state found, sending start notification")
-        subject = f"Batch Process {dag_id} for {data_dt} Started at {format_thai_time(start_time)}"
-        html_content = format_running_message(dag_id, run_id, start_time, conf)
-        
-        send_notification(subject, html_content, conf, 'start', default_emails, slack_webhook, context)
+    #     send_notification(subject, html_content, conf, 'resume', default_emails, slack_webhook, context ,None,None,None,previous_state)
+    # else:
+    #     print("No previous state found, sending start notification")
+    subject = f"Batch Process {dag_id} for {data_dt} Started at {format_thai_time(start_time)}"
+    html_content = format_running_message(dag_id, run_id, start_time, conf)
+    
+    send_notification(subject, html_content, conf, 'start', default_emails, slack_webhook, context)
 
 def send_success_notification(default_emails, slack_webhook=None, **context):
     """Send success notification"""

@@ -64,6 +64,9 @@ def upload_csv_ctrl_to_ftp_server(default_emails: Dict[str, List[str]],
         dag_id = ti.dag_id
         run_id = dag_run.run_id
         conf = dag_run.conf or {}
+        run_id_conf = conf.get('run_id', None)
+        if run_id_conf:
+            raise AirflowSkipException(f"Skipping notification because get run_id: {run_id_conf}")
 
         batch_state = get_batch_state(dag_id, run_id)
 
