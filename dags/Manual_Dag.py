@@ -29,7 +29,7 @@ default_args = {
 }
 
 default_emails = {
-    'email': ['phurinatkantapayao2@gmail.com'],
+    'email': [],
     'emailSuccess': [],
     'emailFail': [],
     'emailPause': [],
