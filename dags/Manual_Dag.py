@@ -12,29 +12,7 @@ from components.notifications import (
 from components.process import process_data_manual
 from components.constants import *
 from components.uploadtoFTP import *
-from components.validators import validate_input_task
-from components.validators import validate_config
-
-
-def validate_input_task_manual(default_emails,**context):
-    try:
-        dag_run = context['dag_run']
-        conf = dag_run.conf
-        default_csv_columns = conf.get('CSV_COLUMNS',[])
-        is_valid, error_message , error_message_format = validate_config(conf, default_csv_columns, context)
-        
-        if not is_valid:
-            context['task_instance'].xcom_push(key='error_message', value=error_message)
-            raise AirflowException(f"{error_message_format}")
-            
-        # If validation passed, store result in XCom
-        context['task_instance'].xcom_push(key='validation_result', value=True)
-
-    except Exception as e:
-        error_msg = str(e)
-        if not isinstance(e, AirflowException):
-            error_msg = f"Unexpected error during validation: {error_msg}"
-        raise AirflowException(error_msg)
+from components.validators import validate_input_task_manual
 
 API_HEADERS = {
     'Authorization': 'R2pDZVNaRUJnMmt1a0tEVE5raEo6ZTNrYm1WRk1Sb216UGUtU21DS21iZw==',
@@ -96,7 +74,7 @@ with DAG(
         task_id='validate_input_task_manual',
         python_callable=validate_input_task_manual,
         provide_context=True,
-        retries=1,
+        retries=0,
         op_args=[default_emails]
     )
 
