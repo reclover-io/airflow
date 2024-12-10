@@ -29,7 +29,7 @@ default_args = {
 }
 
 default_emails = {
-    'email': [],
+    'email': ['ebs_olm@aeon.co.th'],
     'emailSuccess': [],
     'emailFail': [],
     'emailPause': [],

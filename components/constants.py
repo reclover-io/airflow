@@ -7,7 +7,7 @@ THAI_TZ = pytz.timezone('Asia/Bangkok')
 DB_CONNECTION = 'postgresql+psycopg2://airflow:airflow@postgres:5432/airflow'
 
 # Other Constants
-PAGE_SIZE = 50
+PAGE_SIZE = 10000
 
 ACCESS_TOKEN = "Enter Your Access Token Here."
 TO_USER_ID = "Enter Your user ID  Here."
