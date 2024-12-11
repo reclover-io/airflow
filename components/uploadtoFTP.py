@@ -9,6 +9,9 @@ from components.database import (
 )
 import time
 
+host_ftps = "34.124.138.144"
+username_ftps = "airflow"
+password_ftps = "airflow"
 
 def run_lftp(host, username, password, local_file, remote_path, local_file_ctrl, remote_path_ctrl, ti=None):
     """
@@ -119,9 +122,9 @@ def upload_csv_ctrl_to_ftp_server(default_emails: Dict[str, List[str]],
         # Run lftp to upload files
         print(f"Starting upload of {csv_local_file_path} and {ctrl_local_file_path}...")
         run_lftp(
-            host='34.124.138.144',
-            username='airflow',
-            password='airflow',
+            host=host_ftps,
+            username=username_ftps,
+            password=password_ftps,
             local_file=csv_local_file_path,
             remote_path=csv_remote_path,
             local_file_ctrl=ctrl_local_file_path,
@@ -254,9 +257,9 @@ def upload_csv_ctrl_to_ftp_server_manual(default_emails: Dict[str, List[str]],
         # Run lftp to upload files
         print(f"Starting upload of {csv_local_file_path} and {ctrl_local_file_path}...")
         run_lftp(
-            host='34.124.138.144',
-            username='airflow',
-            password='airflow',
+            host=host_ftps,
+            username=username_ftps,
+            password=password_ftps,
             local_file=csv_local_file_path,
             remote_path=csv_remote_path,
             local_file_ctrl=ctrl_local_file_path,
