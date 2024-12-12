@@ -779,10 +779,7 @@ def send_success_notification(default_emails, slack_webhook=None, **context):
         remote_path=remote_path
     )
     
-    if conf.get('emailSuccess'):
-        send_notification(subject, html_content, conf, 'success', default_emails, slack_webhook, context,current_time=current_time,remote_path=remote_path)
-    else:
-        send_notification(subject, html_content, conf, 'normal', default_emails, slack_webhook, context,current_time=current_time,remote_path=remote_path)
+    send_notification(subject, html_content, conf, 'success', default_emails, slack_webhook, context,current_time=current_time,remote_path=remote_path)
 
 def is_manual_pause(error_message: Optional[str]) -> bool:
     """

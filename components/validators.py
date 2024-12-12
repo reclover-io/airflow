@@ -306,6 +306,10 @@ def validate_start_run(start_run: Optional[str]) -> Tuple[bool, Optional[str]]:
         return True, None
 
     try:
+        is_valid, error_message = validate_datetime_format(start_run, 'start_run')
+        if not is_valid:
+            return False, error_message
+            
         # Validate format
         start_time = datetime.strptime(start_run, '%Y-%m-%d %H:%M:%S.%f')
         # Convert to Thai timezone
