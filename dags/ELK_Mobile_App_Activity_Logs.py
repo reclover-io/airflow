@@ -43,7 +43,7 @@ default_emails = {
     'emailStart': []
 }
 
-DEFAULT_CSV_COLUMNS = ['RequestID', 'Path', 'UserToken', 'RequestDateTime', 'Status', 'CounterCode']
+DEFAULT_CSV_COLUMNS = ['RequestID', 'UserToken', 'Path', 'CounterCode', 'Status', 'RequestDateTime']
 
 # Default arguments for the DAG
 default_args = {
@@ -99,7 +99,7 @@ with DAG(
         task_id='validate_input',
         python_callable=validate_input_task,
         provide_context=True,
-        retries=1,
+        retries=0,
         op_args=[DEFAULT_CSV_COLUMNS, default_emails]
     )
 
