@@ -5,6 +5,7 @@ import shutil
 import os
 import signal
 from contextlib import contextmanager
+import subprocess
 import time
 
 from components.database import (
@@ -214,10 +215,11 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
                 print(f"\nFetching page {page}...")
                 
                 try:
-                    total, used, free = shutil.disk_usage("/")
-                    free_gb = free // (2**30)
+                    check_disk = subprocess.run(['df', "/home/airflowadm/airflow/data/"], capture_output=True, text=True)
+                    available_gb = int(check_disk.stdout.split('\n')[1].split()[3]) // (2**30)
+                    print(f"Available space: {available_gb}GB")
                     min_space_gb = 5
-                    if free_gb < min_space_gb:
+                    if available_gb < min_space_gb:
                         error_msg = f"Failed to create csv file because of insufficient space."
                         save_batch_state(
                             batch_id=dag_id,
