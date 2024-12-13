@@ -157,3 +157,26 @@ def get_initial_start_time(batch_id: str, run_id: str) -> Optional[datetime]:
                 # ถ้ามี timezone อยู่แล้ว ให้แปลงเป็น Thai timezone
                 return result[0].astimezone(THAI_TZ)
         return None
+
+def delete_batch_state(file_name: str) -> None:
+    """
+    Delete a batch state from the database based on the filename.
+    """
+    try:
+        with get_db_connection() as conn:
+            query = text("""
+                DELETE FROM batch_states
+                WHERE csv_filename = :file_name
+                RETURNING batch_id, run_id;
+            """)
+            
+            result = conn.execute(query, {'file_name': file_name}).fetchone()
+            
+            if result:
+                batch_id, run_id = result
+                print(f"Successfully deleted file '{file_name}' from batch_id: {batch_id}, run_id: {run_id}.")
+            else:
+                print(f"No record found with csv_filename: {file_name}")
+                
+    except Exception as e:
+        print(f"An error occurred: {e}")
