@@ -4,6 +4,7 @@ import re
 from airflow.exceptions import AirflowException
 from components.utils import get_thai_time
 from airflow.utils.session import create_session
+from dateutil.relativedelta import relativedelta
 from airflow.models import DagRun
 from components.constants import THAI_TZ
 
@@ -295,6 +296,30 @@ def get_default_config(execution_date: datetime) -> Dict:
         microsecond=999000
     ).strftime('%Y-%m-%d %H:%M:%S.999')
     
+    return {
+        'startDate': start_date,
+        'endDate': end_date
+    }
+
+def get_default_config_monthly(execution_date: datetime) -> Dict:
+    """
+    Generate default configuration based on execution date
+    For monthly batch, startDate is 1 month ago from current time
+    and endDate is 1 day ago.
+    """
+    # Get current time in Thai timezone
+    current_time = get_thai_time()
+
+    # Calculate start date (1 month ago)
+    start_date = (current_time - relativedelta(months=1)).replace(
+    hour=0, minute=0, second=0, microsecond=0
+    ).strftime('%Y-%m-%d %H:%M:%S.000')
+
+    # Calculate end date (1 day ago)
+    end_date = (current_time - timedelta(days=1)).replace(
+        hour=23, minute=59, second=59, microsecond=999000
+    ).strftime('%Y-%m-%d %H:%M:%S.999')
+
     return {
         'startDate': start_date,
         'endDate': end_date
@@ -606,3 +631,44 @@ def validate_input_task_manual(default_emails, **context):
            context['task_instance'].xcom_push(key='error_message', value=error_msg)
            raise AirflowException(error_msg)
        raise
+
+def validate_input_task_monthly(default_csv_columns: List[str], default_emails: Dict[str, List[str]], **context):
+    """Validate input configuration using existing validate_config function"""
+    try:
+        dag_run = context['dag_run']
+        
+        # Get execution date from context
+        execution_date = context['execution_date']
+        
+        # If no config provided, use default config
+        if not dag_run.conf:
+            default_config = get_default_config_monthly(execution_date)
+            # Add default email configuration
+            # default_config.update({
+            #     'email': default_emails.get('email', []),
+            #     'emailSuccess': default_emails.get('emailSuccess', []),
+            #     'emailFail': default_emails.get('emailFail', []),
+            #     'emailPause': default_emails.get('emailPause', []),
+            #     'emailResume': default_emails.get('emailResume', []),
+            #     'emailStart': default_emails.get('emailStart', [])
+            # })
+            dag_run.conf = default_config
+            print(f"Using default configuration: {default_config}")
+        
+        conf = dag_run.conf
+        
+        # Use existing validate_config function
+        is_valid, error_message , error_message_format = validate_config(conf, default_csv_columns, context)
+        
+        if not is_valid:
+            context['task_instance'].xcom_push(key='error_message', value=error_message)
+            raise AirflowException(f"{error_message_format}")
+            
+        # If validation passed, store result in XCom
+        context['task_instance'].xcom_push(key='validation_result', value=True)
+        
+    except Exception as e:
+        error_msg = str(e)
+        if not isinstance(e, AirflowException):
+            error_msg = f"Unexpected error during validation: {error_msg}"
+        raise AirflowException(error_msg)
