@@ -216,8 +216,8 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
                 
                 try:
                     check_disk = subprocess.run(['df', "/opt/airflow/data/", '-B1'], capture_output=True, text=True)
-                    available_gb = int(check_disk.stdout.split('\n')[1].split()[3]) // (2**30)
-                    print(f"Available space: {available_gb}GB")
+                    available_gb = float(check_disk.stdout.split('\n')[1].split()[3]) / (2**30)
+                    print(f"Available space: {available_gb:.2f} GB")
                     min_space_gb = 5
                     if available_gb < min_space_gb:
                         error_msg = f"Failed to create csv file because of insufficient space."
