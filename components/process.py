@@ -215,7 +215,7 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
                 print(f"\nFetching page {page}...")
                 
                 try:
-                    check_disk = subprocess.run(['df', "/home/airflowadm/airflow/data/"], capture_output=True, text=True)
+                    check_disk = subprocess.run(['df', "/opt/airflow/data/", '-B1'], capture_output=True, text=True)
                     available_gb = int(check_disk.stdout.split('\n')[1].split()[3]) // (2**30)
                     print(f"Available space: {available_gb}GB")
                     min_space_gb = 5
