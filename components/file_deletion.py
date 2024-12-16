@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from components.database import delete_batch_state
 
 # Constants
-BASE_DIRS = ["/opt/airflow/data/batch", "/opt/airflow/data/ftps", "/opt/airflow/logs"]
+BASE_DIRS = ["/opt/airflow/data/batch", "/opt/airflow/logs"]
 RETENTION_DAYS = 14
 FILE_TYPE = '.csv'
 
@@ -11,8 +11,8 @@ def delete_file(file_paths):
     """Delete a list of files and print the result."""
     for file_path in file_paths:
         try:
-            os.remove(file_path)
             print(f"Deleted file: {file_path}")
+            os.remove(file_path)
         except Exception as e:
             print(f"Error deleting file {file_path}: {e}")
 

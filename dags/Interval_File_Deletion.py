@@ -20,8 +20,6 @@ with DAG(
     description='A simple DAG to clean up old batch files with an interval-based schedule.',
     schedule_interval='@daily',
     catchup=False,
-    tags=['file_deletion', 'batch_files', 'interval']
-
 ) as dag:
     
     delete_old_batch_files_task = PythonOperator(
