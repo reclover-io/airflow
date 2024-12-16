@@ -1,5 +1,5 @@
 from typing import Dict, Optional, List
-from sqlalchemy import text
+from sqlalchemy import text, SQLAlchemyError
 import pytz
 from datetime import datetime
 import json
@@ -158,25 +158,58 @@ def get_initial_start_time(batch_id: str, run_id: str) -> Optional[datetime]:
                 return result[0].astimezone(THAI_TZ)
         return None
 
-def delete_batch_state(file_name: str) -> None:
+def delete_batch_state(file_names: List[str]) -> None:
     """
-    Delete a batch state from the database based on the filename.
+    Delete batch states and related records from the database based on a list of .csv filenames.
     """
+    if not file_names:
+        print("No files to delete from the database.")
+        return
+
     try:
         with get_db_connection() as conn:
             query = text("""
-                DELETE FROM batch_states
-                WHERE csv_filename = :file_name
-                RETURNING batch_id, run_id;
+                DO $$
+                DECLARE
+                    record RECORD;
+                BEGIN
+                    -- ลบและคืนค่าข้อมูลจาก batch_states
+                    FOR record IN 
+                        DELETE FROM batch_states
+                        WHERE csv_filename = ANY(:file_names)
+                        RETURNING batch_id, run_id, csv_filename
+                    LOOP
+                        -- ลบข้อมูลที่เกี่ยวข้องในตารางอื่น
+                        DELETE FROM dag_run
+                        WHERE dag_id = record.batch_id AND run_id = record.run_id;
+                        
+                        DELETE FROM rendered_task_instance_fields
+                        WHERE dag_id = record.batch_id AND run_id = record.run_id;
+
+                        DELETE FROM task_fail
+                        WHERE dag_id = record.batch_id AND run_id = record.run_id;
+                        
+                        DELETE FROM task_instance
+                        WHERE dag_id = record.batch_id AND run_id = record.run_id;
+                        
+                        DELETE FROM task_instance_note
+                        WHERE dag_id = record.batch_id AND run_id = record.run_id;
+                        
+                        DELETE FROM task_map
+                        WHERE dag_id = record.batch_id AND run_id = record.run_id;
+                        
+                        DELETE FROM task_reschedule
+                        WHERE dag_id = record.batch_id AND run_id = record.run_id;
+
+                        DELETE FROM xcom
+                        WHERE dag_id = record.batch_id AND run_id = record.run_id;
+                    END LOOP;
+                END $$;
             """)
-            
-            result = conn.execute(query, {'file_name': file_name}).fetchone()
-            
-            if result:
-                batch_id, run_id = result
-                print(f"Successfully deleted file '{file_name}' from batch_id: {batch_id}, run_id: {run_id}.")
-            else:
-                print(f"No record found with csv_filename: {file_name}")
-                
-    except Exception as e:
-        print(f"An error occurred: {e}")
+
+            # Execute the query
+            conn.execute(query, {'file_names': file_names})
+            print("Batch states and related records deleted successfully.")
+
+    except SQLAlchemyError as e:
+        print(f"An error occurred while deleting batch states: {str(e)}")
