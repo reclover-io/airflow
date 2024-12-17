@@ -20,12 +20,16 @@ def delete_file(file_paths):
 
 def delete_empty_directory(directory_path):
     """Delete an empty directory and print the result."""
-    if not os.listdir(directory_path):  # Check if the directory is empty
-        try:
-            os.rmdir(directory_path)
-            print(f"Deleted empty directory: {directory_path}")
-        except Exception as e:
-            print(f"Error deleting directory {directory_path}: {e}")
+    # ตรวจสอบว่า directory_path ไม่ใช่ BASE_DIR
+    if directory_path not in BASE_DIRS:  
+        if not os.listdir(directory_path):  # Check if the directory is empty
+            try:
+                os.rmdir(directory_path)
+                print(f"Deleted empty directory: {directory_path}")
+            except Exception as e:
+                print(f"Error deleting directory {directory_path}: {e}")
+    else:
+        print(f"Skipping base directory: {directory_path}")
 
 def check_and_log_if_empty(directory):
     """Check if the specified directory is empty and log a message if it is."""
