@@ -5,7 +5,6 @@ from components.database import delete_batch_state
 # Constants
 BASE_DIRS = ["/opt/airflow/data/batch", "/opt/airflow/logs"]
 RETENTION_DAYS = 14
-FILE_TYPE = '.csv'
 
 def delete_file(file_paths):
     """Delete a list of files and print the result."""
@@ -42,7 +41,6 @@ def delete_old_batch_files():
     and then delete the files from the filesystem.
     """
     cutoff_date = datetime.now() - timedelta(days=RETENTION_DAYS)
-    csv_files_list = []  # Store filenames for database deletion
     file_path_list = []  # Store full file paths for deletion
 
     for base_dir in BASE_DIRS:
@@ -56,13 +54,11 @@ def delete_old_batch_files():
                 file_path = os.path.join(root, filename)
                 if os.path.isfile(file_path) and datetime.fromtimestamp(os.path.getmtime(file_path)) < cutoff_date:
                     file_path_list.append(file_path)
-                    if filename.endswith(FILE_TYPE):
-                        csv_files_list.append(filename)
 
             for directory in dirs:
                 delete_empty_directory(os.path.join(root, directory))
 
         check_and_log_if_empty(base_dir)
 
-    delete_batch_state(csv_files_list)
+    delete_batch_state()
     delete_file(file_path_list)
