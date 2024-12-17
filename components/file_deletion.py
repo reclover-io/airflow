@@ -13,6 +13,8 @@ def delete_file(file_paths):
         try:
             print(f"Deleted file: {file_path}")
             os.remove(file_path)
+            folder_path = os.path.dirname(file_path)
+            delete_empty_directory(folder_path)
         except Exception as e:
             print(f"Error deleting file {file_path}: {e}")
 
