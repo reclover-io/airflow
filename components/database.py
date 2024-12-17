@@ -184,7 +184,6 @@ def delete_batch_state() -> None:
                 WHERE
                     dttm < (CURRENT_TIMESTAMP - INTERVAL '14 days');
             """)
-
             # Execute the query
             conn.execute(query)
             print("Batch states and related records deleted successfully.")

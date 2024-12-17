@@ -27,9 +27,4 @@ with DAG(
         python_callable=delete_old_batch_files,
     )
 
-    end_task = PythonOperator(
-        task_id='end_task',
-        python_callable=lambda: print("Workflow finished successfully!"),
-    )
-
-    delete_old_batch_files_task >> end_task
+    delete_old_batch_files_task
