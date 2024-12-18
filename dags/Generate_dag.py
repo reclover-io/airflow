@@ -38,7 +38,7 @@ from components.notifications import (
 from components.process import process_data
 from components.constants import *
 from components.uploadtoFTP import *
-from components.validators import validate_input_task
+from components.validators import *
 
 local_tz = pendulum.timezone("Asia/Bangkok")
 
@@ -77,7 +77,7 @@ default_args = {{
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 3,
-    'retry_delay': timedelta(seconds=1)
+    'retry_delay': timedelta(seconds=300)
 }}
 
 class WaitUntilTimeSensor(BaseSensorOperator):
@@ -120,7 +120,7 @@ with DAG(
         task_id='validate_input',
         python_callable=validate_input_task,
         provide_context=True,
-        retries=1,
+        retries=0,
         op_args=[DEFAULT_CSV_COLUMNS, default_emails]
     )
 

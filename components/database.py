@@ -1,5 +1,5 @@
 from typing import Dict, Optional, List
-from sqlalchemy import text, SQLAlchemyError
+from sqlalchemy import text
 import pytz
 from datetime import datetime
 import json
@@ -188,5 +188,5 @@ def delete_batch_state() -> None:
             conn.execute(query)
             print("Batch states and related records deleted successfully.")
 
-    except SQLAlchemyError as e:
+    except Exception as e:
         print(f"An error occurred while deleting batch states: {str(e)}")
