@@ -1,5 +1,5 @@
 from typing import Dict, Optional, List
-from sqlalchemy import text
+from sqlalchemy import text, SQLAlchemyError
 import pytz
 from datetime import datetime
 import json
@@ -157,3 +157,36 @@ def get_initial_start_time(batch_id: str, run_id: str) -> Optional[datetime]:
                 # ถ้ามี timezone อยู่แล้ว ให้แปลงเป็น Thai timezone
                 return result[0].astimezone(THAI_TZ)
         return None
+
+def delete_batch_state() -> None:
+    """
+    Delete batch states and related records from the database based on a list of .csv filenames.
+    """
+    try:
+        with get_db_connection() as conn:
+            query = text("""
+                WITH
+                    deleted_dag_run AS (
+                        DELETE FROM dag_run
+                        WHERE
+                            updated_at < (CURRENT_TIMESTAMP - INTERVAL '14 days')
+                        RETURNING
+                            dag_id,
+                            run_id
+                    ),
+                    deleted_batch_states AS (
+                        DELETE FROM batch_states USING deleted_dag_run
+                        WHERE
+                            batch_states.batch_id = deleted_dag_run.dag_id
+                            AND batch_states.run_id = deleted_dag_run.run_id
+                    )
+                DELETE FROM LOG
+                WHERE
+                    dttm < (CURRENT_TIMESTAMP - INTERVAL '14 days');
+            """)
+            # Execute the query
+            conn.execute(query)
+            print("Batch states and related records deleted successfully.")
+
+    except SQLAlchemyError as e:
+        print(f"An error occurred while deleting batch states: {str(e)}")
