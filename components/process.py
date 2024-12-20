@@ -491,10 +491,16 @@ def process_data(API_URL: str, TEMP_DIR: str, OUTPUT_DIR: str,CONTROL_DIR: str, 
 
 def process_data_manual(API_HEADERS,default_emails,slack_webhook,**kwargs):
     """Process the data and handle notifications""" 
+
+   
     try:
         ti = kwargs['task_instance']
         dag_run = kwargs['dag_run']
         conf = dag_run.conf or {}
+
+        run_id_conf = conf.get('run_id', None)
+        if run_id_conf:
+            raise AirflowSkipException(f"Skipping notification because get run_id: {run_id_conf}")
         
         DAG_NAME = conf.get('DAG_NAME','')
         API_URL = conf.get('API_URL','')
@@ -612,7 +618,13 @@ def process_data_manual(API_HEADERS,default_emails,slack_webhook,**kwargs):
                 )
 
             raise AirflowException(error_msg)
-            
+        
+    except AirflowSkipException as e:
+        # Handle skipped task explicitly
+        print(e)
+        raise
+
+
     except Exception as e:
         error_msg = str(e)
         ti.xcom_push(key='error_message', value=error_msg)

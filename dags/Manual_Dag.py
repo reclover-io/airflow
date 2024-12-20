@@ -29,7 +29,7 @@ default_args = {
 }
 
 default_emails = {
-    'email': [],
+    'email': ['chadaphon.t@extosoft.com','aruethai.c@extosoft.com'],
     'emailSuccess': [],
     'emailFail': [],
     'emailPause': [],
@@ -70,6 +70,13 @@ with DAG(
     catchup=False
 ) as dag:
 
+    check_previous_fails = PythonOperator(
+        task_id='check_previous_failed_batch',
+        python_callable=check_previous_failed_batch,
+        provide_context=True,
+        trigger_rule=TriggerRule.ALL_SUCCESS
+    )
+        
     validate_input = PythonOperator(
         task_id='validate_input_task_manual',
         python_callable=validate_input_task_manual,
@@ -78,12 +85,14 @@ with DAG(
         op_args=[default_emails]
     )
 
+
     wait_for_start_time = WaitUntilTimeSensor(
         task_id="wait_for_start_time",
         poke_interval=60,  # Check every 30 seconds
         mode="reschedule",  # Release worker slot between checks
         trigger_rule=TriggerRule.ALL_SUCCESS
     )
+
 
     running_notification = PythonOperator(
         task_id='send_running_notification',
@@ -127,7 +136,8 @@ with DAG(
     )
 
     validate_input >> [failure_notification]
-    validate_input >> wait_for_start_time >> [running_notification, process_task, failure_notification]
+    validate_input >> wait_for_start_time >> check_previous_fails >> [running_notification, process_task, failure_notification]
     process_task >> [uploadtoFTP, failure_notification]
     uploadtoFTP >> [success_notification, failure_notification]
     process_task >> success_notification
+

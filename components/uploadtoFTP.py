@@ -9,9 +9,9 @@ from components.database import (
 )
 import time
 
-host_ftps = "34.124.138.144"
-username_ftps = "airflow"
-password_ftps = "airflow"
+host_ftps = "ftps://10.250.1.101:990"
+username_ftps = "elk_ftps"
+password_ftps = "password@1"
 
 def run_lftp(host, username, password, local_file, remote_path, local_file_ctrl, remote_path_ctrl, ti=None):
     """
@@ -340,6 +340,7 @@ def upload_csv_ctrl_to_ftp_server_manual(default_emails: Dict[str, List[str]],
     """
     Upload files to FTPS server using lftp with error handling and notifications.
     """
+
     try:
         # Extract context from Airflow
         ti = kwargs['task_instance']
@@ -350,6 +351,9 @@ def upload_csv_ctrl_to_ftp_server_manual(default_emails: Dict[str, List[str]],
         ftp_path = conf.get('FTP_PATH','')
         batch_state = get_batch_state(dag_id, run_id)
 
+        run_id_conf = conf.get('run_id', None)
+        if run_id_conf:
+            raise AirflowSkipException(f"Skipping notification because get run_id: {run_id_conf}")
         # Check if upload should be skipped
         should_upload_ftp = ti.xcom_pull(key='should_upload_ftp', task_ids='validate_input_task_manual')
         if not should_upload_ftp:
@@ -403,7 +407,8 @@ def upload_csv_ctrl_to_ftp_server_manual(default_emails: Dict[str, List[str]],
             local_file=csv_local_file_path,
             remote_path=csv_remote_path,
             local_file_ctrl=ctrl_local_file_path,
-            remote_path_ctrl=ctrl_remote_path
+            remote_path_ctrl=ctrl_remote_path,
+            ti=ti
         )
 
         save_batch_state(
@@ -420,6 +425,7 @@ def upload_csv_ctrl_to_ftp_server_manual(default_emails: Dict[str, List[str]],
             total_records=batch_state.get('total_records') if batch_state else None,
             fetched_records=batch_state.get('fetched_records', 0) if batch_state else 0
         )
+    
 
     except AirflowSkipException as e:
         # Handle skipped task explicitly
