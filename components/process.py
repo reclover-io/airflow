@@ -98,7 +98,7 @@ def is_manual_pause(error_message: Optional[str]) -> bool:
     return error_message and any(msg in error_message for msg in sigterm_messages)
 
 # Main process functions
-def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str, conf: Dict, API_URL: str, TEMP_DIR: str, OUTPUT_DIR: str, DEFAULT_CSV_COLUMNS: List[str], API_HEADERS: Dict[str, str]) -> Tuple[str, str]:
+def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str, conf: Dict, API_URL: str, TEMP_DIR: str, OUTPUT_DIR: str, DEFAULT_CSV_COLUMNS: List[str], API_HEADERS: Dict[str, str],csv_sep: str) -> Tuple[str, str]:
     """Fetch all data from API using pagination and save to CSV with state management"""
 
     # Get output configuration
@@ -270,7 +270,7 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
                         current_page_size = total_records - fetched_count
                         records = records[:current_page_size]  # ตัดข้อมูลส่วนเกินทิ้ง
 
-                    save_temp_data(records, temp_file_path, headers=should_write_header, columns=csv_columns)
+                    save_temp_data(records, temp_file_path,csv_sep,DEFAULT_CSV_COLUMNS,headers=should_write_header, columns=csv_columns)
                     should_write_header = False
                     
                     fetched_count += current_page_size
@@ -361,7 +361,7 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
         )
         raise e
 
-def process_data(API_URL: str, TEMP_DIR: str, OUTPUT_DIR: str,CONTROL_DIR: str, API_HEADERS: Dict[str, str], DEFAULT_CSV_COLUMNS: List[str], default_emails: Dict[str, List[str]], slack_webhook: Optional[str] = None, **kwargs):
+def process_data(API_URL: str, TEMP_DIR: str, OUTPUT_DIR: str,CONTROL_DIR: str, API_HEADERS: Dict[str, str], DEFAULT_CSV_COLUMNS: List[str], default_emails: Dict[str, List[str]], slack_webhook: Optional[str] = None,csv_sep='|', **kwargs):
     """Process the data and handle notifications""" 
     try:
         ti = kwargs['task_instance']
@@ -374,7 +374,7 @@ def process_data(API_URL: str, TEMP_DIR: str, OUTPUT_DIR: str,CONTROL_DIR: str, 
         start_date = conf.get('startDate')
         end_date = conf.get('endDate')
         run_id = dag_run.run_id
-
+        csv_sep = conf.get('csv_delimiter', csv_sep)
         batch_state = get_batch_state(dag_run.dag_id, run_id)
         if batch_state:
             total_records = batch_state.get('total_records')
@@ -419,7 +419,8 @@ def process_data(API_URL: str, TEMP_DIR: str, OUTPUT_DIR: str,CONTROL_DIR: str, 
                 TEMP_DIR=TEMP_DIR,
                 OUTPUT_DIR=OUTPUT_DIR,
                 DEFAULT_CSV_COLUMNS=DEFAULT_CSV_COLUMNS,
-                API_HEADERS=API_HEADERS
+                API_HEADERS=API_HEADERS,
+                csv_sep=csv_sep
 
             )
             
@@ -443,7 +444,8 @@ def process_data(API_URL: str, TEMP_DIR: str, OUTPUT_DIR: str,CONTROL_DIR: str, 
                 ctrl_filename=ctrl_filename_final,
                 dag_id=dag_run.dag_id,
                 conf=conf,
-                CONTROL_DIR=CONTROL_DIR
+                CONTROL_DIR=CONTROL_DIR,
+                csv_sep=csv_sep
             )
             
             return (output_path, csv_filename_final, control_path, ctrl_filename_final)
@@ -489,7 +491,7 @@ def process_data(API_URL: str, TEMP_DIR: str, OUTPUT_DIR: str,CONTROL_DIR: str, 
         ti.xcom_push(key='error_message', value=error_msg)
         raise AirflowException(error_msg)
 
-def process_data_manual(API_HEADERS,default_emails,slack_webhook,**kwargs):
+def process_data_manual(API_HEADERS,default_emails,slack_webhook,csv_sep='|',**kwargs):
     """Process the data and handle notifications""" 
 
    
@@ -512,8 +514,7 @@ def process_data_manual(API_HEADERS,default_emails,slack_webhook,**kwargs):
         OUTPUT_DIR = f'/opt/airflow/data/batch/{DAG_NAME}'
         TEMP_DIR = f'/opt/airflow/data/batch/temp'
         CONTROL_DIR = f'/opt/airflow/data/batch/{DAG_NAME}'
-        
-
+        csv_sep = conf.get('csv_delimiter', csv_sep)
         run_id = dag_run.run_id
         batch_state = get_batch_state(dag_run.dag_id, run_id)
         
@@ -559,7 +560,8 @@ def process_data_manual(API_HEADERS,default_emails,slack_webhook,**kwargs):
                 TEMP_DIR=TEMP_DIR,
                 OUTPUT_DIR=OUTPUT_DIR,
                 DEFAULT_CSV_COLUMNS=DEFAULT_CSV_COLUMNS,
-                API_HEADERS=API_HEADERS
+                API_HEADERS=API_HEADERS,
+                csv_sep=csv_sep
 
             )
             
@@ -583,7 +585,8 @@ def process_data_manual(API_HEADERS,default_emails,slack_webhook,**kwargs):
                 ctrl_filename=ctrl_filename_final,
                 dag_id=dag_run.dag_id,
                 conf=conf,
-                CONTROL_DIR=CONTROL_DIR
+                CONTROL_DIR=CONTROL_DIR,
+                csv_sep=csv_sep
             )
             
             return (output_path, csv_filename_final, control_path, ctrl_filename_final)

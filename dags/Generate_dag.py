@@ -3,6 +3,8 @@ from airflow.operators.python import PythonOperator
 from airflow.utils.dates import days_ago
 from datetime import timedelta
 
+
+
 # ฟังก์ชันสำหรับสร้างไฟล์ DAG ใหม่
 def create_dag_file(**kwargs):
     config = kwargs['dag_run'].conf  # รับค่าคอนฟิกจากการรัน
@@ -17,7 +19,7 @@ def create_dag_file(**kwargs):
     emailPause = config.get('EMAIL_PAUSE', [])
     emailResume = config.get('EMAIL_RESUME', [])
     emailStart = config.get('EMAIL_START', [])
-
+    csv_delimiter = config.get('CSV_DELIMITER','|')
     # Template ของ DAG ใหม่ที่เหมือนกับ Friend_MB_Noti_Spending.py
     dag_content = f"""
 from airflow import DAG
@@ -38,7 +40,7 @@ from components.notifications import (
 from components.process import process_data
 from components.constants import *
 from components.uploadtoFTP import *
-from components.validators import validate_input_task
+from components.validators import *
 
 local_tz = pendulum.timezone("Asia/Bangkok")
 
@@ -53,6 +55,7 @@ API_HEADERS = {{
     'Content-Type': 'application/json'
 }}
 
+csv_delimiter = '{csv_delimiter}'
 # Output Configuration
 OUTPUT_DIR = f'/opt/airflow/data/batch/{{DAG_NAME}}'
 TEMP_DIR = f'/opt/airflow/data/batch/temp'
@@ -77,7 +80,7 @@ default_args = {{
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 3,
-    'retry_delay': timedelta(seconds=1)
+    'retry_delay': timedelta(seconds=300)
 }}
 
 class WaitUntilTimeSensor(BaseSensorOperator):
@@ -121,7 +124,7 @@ with DAG(
         python_callable=validate_input_task,
         provide_context=True,
         retries=1,
-        op_args=[DEFAULT_CSV_COLUMNS, default_emails]
+        op_args=[DEFAULT_CSV_COLUMNS, default_emails,csv_delimiter]
     )
 
     wait_for_start_time = WaitUntilTimeSensor(
@@ -144,7 +147,7 @@ with DAG(
         python_callable=process_data,
         provide_context=True,
         retries=3,
-        op_args=[API_URL,TEMP_DIR,OUTPUT_DIR,CONTROL_DIR,API_HEADERS,DEFAULT_CSV_COLUMNS, default_emails, slack_webhook],
+        op_args=[API_URL,TEMP_DIR,OUTPUT_DIR,CONTROL_DIR,API_HEADERS,DEFAULT_CSV_COLUMNS, default_emails, slack_webhook,csv_delimiter],
         trigger_rule=TriggerRule.ONE_SUCCESS
 
     )

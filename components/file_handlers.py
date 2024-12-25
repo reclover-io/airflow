@@ -139,7 +139,7 @@ def get_control_file_config(conf: Dict, dag_id: str, timestamp: datetime, CONTRO
     return control_path, control_filename
 
 def create_control_file(start_date: str, total_records: int, csv_filename: str,ctrl_filename: str,
-                       dag_id: str, conf: Dict, CONTROL_DIR: str) -> Tuple[str, str]:
+                       dag_id: str, conf: Dict, CONTROL_DIR: str, csv_sep: str) -> Tuple[str, str]:
     """
     Create control file with summary information
     Returns (control_path, control_filename)
@@ -166,7 +166,7 @@ def create_control_file(start_date: str, total_records: int, csv_filename: str,c
         
         control_df.to_csv(
             full_path,
-            sep='|',
+            sep=csv_sep,
             index=False,
             quoting=csv.QUOTE_MINIMAL,
             escapechar='\\',
@@ -183,7 +183,7 @@ def create_control_file(start_date: str, total_records: int, csv_filename: str,c
         raise AirflowException(f"Error creating control file: {str(e)}")
 
 # File operations
-def save_temp_data(records: List[Dict], temp_file: str, headers: bool = False, columns: List[str] = None):
+def save_temp_data(records: List[Dict], temp_file: str,csv_sep: str,DEFAULT_CSV_COLUMNS, headers: bool = False, columns: List[str] = None):
     """
     Save data to temporary CSV file with specified columns in exact order using | as separator
     """
@@ -200,16 +200,16 @@ def save_temp_data(records: List[Dict], temp_file: str, headers: bool = False, c
         else:
             ordered_df[col] = ''  # Fill missing columns with empty string
             print(f"Column '{col}' not found in data, filling with empty values")
-    
+
     # Save to CSV with | separator
     ordered_df.to_csv(
         temp_file,
         mode='a',
         header=headers,
         index=False,
-        sep='|',
+        sep=csv_sep,
         escapechar='\\', 
         doublequote=True, 
         quoting=csv.QUOTE_MINIMAL  
     )
-    print(f"Saved data with ordered columns: {columns_to_use} using | separator")
+    print(f"Saved data with ordered columns: {columns_to_use} using {csv_sep} separator")

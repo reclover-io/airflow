@@ -28,6 +28,8 @@ default_args = {
     'retry_delay': timedelta(seconds=1)
 }
 
+csv_delimiter = '|'
+
 default_emails = {
     'email': ['chadaphon.t@extosoft.com','aruethai.c@extosoft.com'],
     'emailSuccess': [],
@@ -107,7 +109,7 @@ with DAG(
         python_callable=process_data_manual,
         provide_context=True,
         retries=3,
-        op_args=[API_HEADERS,default_emails,slack_webhook],
+        op_args=[API_HEADERS,default_emails,slack_webhook,csv_delimiter],
         trigger_rule=TriggerRule.ONE_SUCCESS
     )
     

@@ -2,22 +2,26 @@
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.utils.trigger_rule import TriggerRule
+import pendulum
 from datetime import datetime, timedelta
+from components.check_previous_failed_batch import check_previous_failed_batch
 from airflow.sensors.time_sensor import TimeSensor
 from airflow.utils.timezone import utcnow
 from airflow.sensors.base import BaseSensorOperator
-import pytz
 
 from components.notifications import (
     send_running_notification,
     send_success_notification, 
     send_failure_notification
 )
-from components.process import process_data, check_pause_status
+from components.process import process_data
 from components.constants import *
 from components.uploadtoFTP import *
-from components.validators import validate_input_task
-from components.check_previous_failed_batch import check_previous_failed_batch
+from components.validators import *
+
+local_tz = pendulum.timezone("Asia/Bangkok")
+
+start_date = (datetime.now(local_tz) - timedelta(days=1))
 
 API_URL = "http://34.124.138.144:8000/mobileAppActivity"
 DAG_NAME = 'ELK_Mobile_App_Activity_Logs'
@@ -28,6 +32,7 @@ API_HEADERS = {
     'Content-Type': 'application/json'
 }
 
+csv_delimiter = '|'
 # Output Configuration
 OUTPUT_DIR = f'/opt/airflow/data/batch/{DAG_NAME}'
 TEMP_DIR = f'/opt/airflow/data/batch/temp'
@@ -35,8 +40,8 @@ CONTROL_DIR = f'/opt/airflow/data/batch/{DAG_NAME}'
 slack_webhook = ""
 
 default_emails = {
-    'email': [],
-    'emailSuccess': [],
+    'email': ['aruethai.c@gmail.com'],
+    'emailSuccess': ['test@test.com'],
     'emailFail': [],
     'emailPause': [],
     'emailResume': [],
@@ -52,13 +57,10 @@ default_args = {
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 3,
-    'retry_delay': timedelta(seconds=1)
+    'retry_delay': timedelta(seconds=300)
 }
 
 class WaitUntilTimeSensor(BaseSensorOperator):
-    """
-    Custom sensor to wait until a specific datetime.
-    """
 
     def poke(self, context):
         dag_run_conf = context.get("dag_run").conf
@@ -82,9 +84,8 @@ class WaitUntilTimeSensor(BaseSensorOperator):
 with DAG(
     DAG_NAME,
     default_args=default_args,
-    #schedule_interval="0 0 * * *",
-    schedule_interval=None,
-    start_date=datetime(2024, 11, 25),
+    schedule_interval="0 0 * * *",
+    start_date=start_date,
     catchup=False
 ) as dag:
     
@@ -99,8 +100,8 @@ with DAG(
         task_id='validate_input',
         python_callable=validate_input_task,
         provide_context=True,
-        retries=0,
-        op_args=[DEFAULT_CSV_COLUMNS, default_emails]
+        retries=1,
+        op_args=[DEFAULT_CSV_COLUMNS, default_emails,csv_delimiter]
     )
 
     wait_for_start_time = WaitUntilTimeSensor(
@@ -123,8 +124,9 @@ with DAG(
         python_callable=process_data,
         provide_context=True,
         retries=3,
-        op_args=[API_URL,TEMP_DIR,OUTPUT_DIR,CONTROL_DIR,API_HEADERS,DEFAULT_CSV_COLUMNS, default_emails, slack_webhook],
+        op_args=[API_URL,TEMP_DIR,OUTPUT_DIR,CONTROL_DIR,API_HEADERS,DEFAULT_CSV_COLUMNS, default_emails, slack_webhook,csv_delimiter],
         trigger_rule=TriggerRule.ONE_SUCCESS
+
     )
     
     success_notification = PythonOperator(
@@ -148,12 +150,12 @@ with DAG(
         python_callable=upload_csv_ctrl_to_ftp_server,
         provide_context=True,
         op_args=[default_emails, slack_webhook],
-        trigger_rule=TriggerRule.ALL_SUCCESS,
+        trigger_rule=TriggerRule.ALL_SUCCESS
+        
     )
     
     # Define Dependencies
     # check_previous_fails >> validate_input >> [running_notification, failure_notification]
-
     validate_input >> [running_notification, failure_notification]
     validate_input >> wait_for_start_time >> check_previous_fails >> [running_notification, process_task, failure_notification]
     process_task >> [uploadtoFTP, failure_notification]

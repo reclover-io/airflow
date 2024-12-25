@@ -388,7 +388,7 @@ def validate_run_ids(run_id: str, dag_id: str) -> Tuple[bool, Optional[str]]:
     return True, None
 
 # Main validation function
-def validate_config(conf: Dict, DEFAULT_CSV_COLUMNS: List[str], context: Dict) -> Tuple[bool, Optional[str]]:
+def validate_config(conf: Dict, DEFAULT_CSV_COLUMNS: List[str], context: Dict,csv_delimiter) -> Tuple[bool, Optional[str]]:
     """
     Validate all configuration parameters
     Returns (is_valid, error_message)
@@ -449,6 +449,13 @@ def validate_config(conf: Dict, DEFAULT_CSV_COLUMNS: List[str], context: Dict) -
     if not is_valid:
         errors.append(f"Slack Configuration Error: {error_message}")
 
+
+    if csv_delimiter:
+        is_valid, error_message = validate_csv_delimiter(csv_delimiter)
+        if not is_valid:
+            errors.append(f"{error_message}")
+
+
     errors.reverse()
 
     if errors:
@@ -467,7 +474,7 @@ def validate_config(conf: Dict, DEFAULT_CSV_COLUMNS: List[str], context: Dict) -
     
     return True, None, None
 
-def validate_input_task(default_csv_columns: List[str], default_emails: Dict[str, List[str]], **context):
+def validate_input_task(default_csv_columns: List[str], default_emails: Dict[str, List[str]],csv_delimiter: str, **context):
     """Validate input configuration using existing validate_config function"""
     try:
         dag_run = context['dag_run']
@@ -489,15 +496,18 @@ def validate_input_task(default_csv_columns: List[str], default_emails: Dict[str
             # })
             dag_run.conf = default_config
             print(f"Using default configuration: {default_config}")
+
         
         conf = dag_run.conf
         
         # Use existing validate_config function
-        is_valid, error_message , error_message_format = validate_config(conf, default_csv_columns, context)
+        is_valid, error_message , error_message_format = validate_config(conf, default_csv_columns, context,csv_delimiter)
         
         if not is_valid:
             context['task_instance'].xcom_push(key='error_message', value=error_message)
             raise AirflowException(f"{error_message_format}")
+        
+
             
         # If validation passed, store result in XCom
         context['task_instance'].xcom_push(key='validation_result', value=True)
@@ -561,12 +571,21 @@ def validate_slack_config(conf: Dict, context: Dict) -> Tuple[bool, Optional[str
     except Exception as e:
         return False, f"Failed to validate Slack configuration: {str(e)}"
     
+def validate_csv_delimiter(csv_delimiter: str) -> Tuple[bool, Optional[str]]:
+
+    if isinstance(csv_delimiter, str) and len(csv_delimiter) == 1:
+        return True, None  # Valid delimiter
+
+    return False, "CSV Delimiter must be a single character"
+
 def validate_input_task_manual(default_emails, **context):
    """Validate that required fields are present in the configuration"""
    try:
         dag_run = context['dag_run']
         conf = dag_run.conf
         run_ids = conf.get('run_id')
+        csv_delimiter = conf.get('csv_delimiter')
+        
 
         if not conf:
             raise AirflowException("Configuration is required")
@@ -612,6 +631,11 @@ def validate_input_task_manual(default_emails, **context):
         start_run = conf.get('start_run')
         if start_run:
             is_valid, error_message = validate_start_run(start_run)
+            if not is_valid:
+                errors.append(f"{error_message}")
+
+        if csv_delimiter:
+            is_valid, error_message = validate_csv_delimiter(csv_delimiter)
             if not is_valid:
                 errors.append(f"{error_message}")
 
