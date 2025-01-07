@@ -9,9 +9,9 @@ from components.database import (
 )
 import time
 
-host_ftps = "ftps://10.250.1.101:990"
-username_ftps = "elk_ftps"
-password_ftps = "password@1"
+host_ftps = "ftp://34.124.138.144:21"
+username_ftps = "airflow"
+password_ftps = "airflow"
 
 def run_lftp(host, username, password, local_file, remote_path, local_file_ctrl, remote_path_ctrl, ti=None):
     """
@@ -27,6 +27,7 @@ def run_lftp(host, username, password, local_file, remote_path, local_file_ctrl,
     bye
     EOF
     """
+    print("lftp_command:",lftp_command)
     try:
         result = subprocess.run(
             lftp_command,
@@ -35,6 +36,7 @@ def run_lftp(host, username, password, local_file, remote_path, local_file_ctrl,
             text=True,
             timeout=300
         )
+
 
         if result.returncode != 0:
             error_msg = f"Upload file to FTP Server failed because failed to connect to FTP Server."
@@ -612,3 +614,140 @@ def upload_csv_ctrl_to_ftp_server_manual(default_emails: Dict[str, List[str]],
 
         raise AirflowException(error_msg)
 
+
+def upload_csv_ctrl_to_ftp_server_manual_v2(default_emails: Dict[str, List[str]], host_ftps_server: str, username_ftps_server: str, password_ftps_server: str, path_ftp: str, slack_webhook: Optional[str] = None, **kwargs):
+    """
+    Upload files to FTPS server using lftp with error handling and notifications.
+    """
+
+    try:
+        # Extract context from Airflow
+        ti = kwargs['task_instance']
+        dag_run = kwargs['dag_run']
+        dag_id = ti.dag_id
+        run_id = dag_run.run_id
+        conf = dag_run.conf or {}
+        batch_state = get_batch_state(dag_id, run_id)
+
+        run_id_conf = conf.get('run_id', None)
+        if run_id_conf:
+            raise AirflowSkipException(f"Skipping notification because get run_id: {run_id_conf}")
+        # Check if upload should be skipped
+        should_upload_ftp = ti.xcom_pull(key='should_upload_ftp', task_ids='validate_input_task_manual_v2')
+        if not should_upload_ftp:
+            raise AirflowSkipException("FTPS upload disabled in configuration")
+
+        # Get file names from XCom
+        output_filename_csv = ti.xcom_pull(dag_id=dag_id, key='output_filename')
+        output_filename_ctrl = ti.xcom_pull(dag_id=dag_id, key='control_filename')
+        dag_name = ti.xcom_pull(dag_id=dag_id, key='dag_name')
+        # Validate file names
+        if not output_filename_csv or not output_filename_ctrl:
+            raise AirflowException("Missing file names from previous tasks")
+
+        # Prepare file paths
+        csv_remote_path = f'{path_ftp}{output_filename_csv}'
+        ctrl_remote_path = f'{path_ftp}{output_filename_ctrl}'
+
+        remote_path = f'{path_ftp}'
+        ti.xcom_push(key='remote_path', value=remote_path)
+
+        csv_local_file_path = f'/opt/airflow/data/batch/{dag_name}/{output_filename_csv}'
+        ctrl_local_file_path = f'/opt/airflow/data/batch/{dag_name}/{output_filename_ctrl}'
+
+        # Verify local files exist
+        if not os.path.exists(csv_local_file_path) or not os.path.exists(ctrl_local_file_path):
+            print(f"CSV file not found: {csv_local_file_path} and Control file: {ctrl_local_file_path}")
+            error_msg = "Upload file to FTP Server failed because can't find the file to upload."
+            ti.xcom_push(key='error_message', value=error_msg)
+            save_batch_state(
+                batch_id=dag_id,
+                run_id=run_id,
+                start_date=conf.get('startDate'),
+                end_date=conf.get('endDate'),
+                csv_filename=output_filename_csv,
+                ctrl_filename=output_filename_ctrl,
+                current_page=batch_state.get('current_page', 1) if batch_state else 1,
+                last_search_after=batch_state.get('last_search_after') if batch_state else None,
+                status='FAILED',
+                error_message=f"FTP upload failed: {error_msg}",
+                total_records=batch_state.get('total_records') if batch_state else None,
+                fetched_records=batch_state.get('fetched_records', 0) if batch_state else 0
+            )
+            raise AirflowException(error_msg)
+
+        # Run lftp to upload files
+        print(f"Starting upload of {csv_local_file_path} and {ctrl_local_file_path}...")
+        run_lftp(
+            host=host_ftps_server,
+            username=username_ftps_server,
+            password=password_ftps_server,
+            local_file=csv_local_file_path,
+            remote_path=csv_remote_path,
+            local_file_ctrl=ctrl_local_file_path,
+            remote_path_ctrl=ctrl_remote_path,
+            ti=ti
+        )
+
+        save_batch_state(
+            batch_id=dag_id,
+            run_id=run_id,
+            start_date=conf.get('startDate'),
+            end_date=conf.get('endDate'),
+            csv_filename=output_filename_csv,
+            ctrl_filename=output_filename_ctrl,
+            current_page=batch_state.get('current_page', 1) if batch_state else 1,
+            last_search_after=batch_state.get('last_search_after') if batch_state else None,
+            status='COMPLETED',
+            error_message=None,
+            total_records=batch_state.get('total_records') if batch_state else None,
+            fetched_records=batch_state.get('fetched_records', 0) if batch_state else 0
+        )
+    
+
+    except AirflowSkipException as e:
+        # Handle skipped task explicitly
+        print(f"Task skipped: {e}")
+        raise
+
+    except Exception as e:
+        # General error handling
+        error_msg = f"Upload file to FTP Server failed because failed to connect to FTP Server."
+        print(f"FTPS connection error: {str(e)}")
+        print(error_msg)
+
+        # Push error to XCom for downstream tasks
+        ti.xcom_push(key='error_message', value=error_msg)
+
+        save_batch_state(
+            batch_id=dag_id,
+            run_id=run_id,
+            start_date=conf.get('startDate'),
+            end_date=conf.get('endDate'),
+            csv_filename=output_filename_csv,
+            ctrl_filename=output_filename_ctrl,
+            current_page=batch_state.get('current_page', 1) if batch_state else 1,
+            last_search_after=batch_state.get('last_search_after') if batch_state else None,
+            status='FAILED',
+            error_message=f"FTP upload failed: {error_msg}",
+            total_records=batch_state.get('total_records') if batch_state else None,
+            fetched_records=batch_state.get('fetched_records', 0) if batch_state else 0
+        )
+
+        # Retry notification logic
+        try_number = ti.try_number
+        max_retries = ti.max_tries
+        if try_number < max_retries:
+            send_retry_notification(
+                dag_id=dag_id,
+                run_id=run_id,
+                error_message=error_msg,
+                retry_count=try_number,
+                max_retries=max_retries,
+                conf=conf,
+                default_emails=default_emails,
+                slack_webhook=slack_webhook,
+                context=kwargs
+            )
+
+        raise AirflowException(error_msg)

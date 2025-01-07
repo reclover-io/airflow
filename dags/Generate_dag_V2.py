@@ -12,7 +12,7 @@ def create_dag_file(**kwargs):
     dag_name = config.get('DAG_NAME', 'default_dag_name')
     csv_columns = config.get('DEFAULT_CSV_COLUMNS', ['col1', 'col2', 'col3'])
     authorization = config.get('AUTHORIZATION', 'default_authorization_token')
-    schedule_interval = config.get('SCHEDULT_INTERVAL', None)
+    schedule_interval = config.get('SCHEDULE_INTERVAL', None)
     email = config.get('EMAIL', [])
     emailSuccess = config.get('EMAIL_SUCCESS', [])
     emailFail = config.get('EMAIL_FAIL', [])
@@ -41,10 +41,10 @@ from components.notifications import (
     send_success_notification, 
     send_failure_notification
 )
-from components.process import process_data
+from components.process_v2 import process_data
 from components.constants import *
 from components.uploadtoFTP import *
-from components.validators import *
+from components.validators_v2 import *
 
 local_tz = pendulum.timezone("Asia/Bangkok")
 
@@ -178,9 +178,9 @@ with DAG(
 
     uploadtoFTP = PythonOperator(
         task_id='uploadtoFTP',
-        python_callable=upload_csv_ctrl_to_ftp_server,
+        python_callable=upload_csv_ctrl_to_ftp_server_v2,
         provide_context=True,
-        op_args=[default_emails, slack_webhook,host_ftps,username_ftps,password_ftps,path_ftp],
+        op_args=[default_emails,host_ftps,username_ftps,password_ftps,path_ftp,slack_webhook],
         trigger_rule=TriggerRule.ALL_SUCCESS
         
     )
@@ -204,7 +204,7 @@ with DAG(
 
 # สร้าง DAG หลัก
 with DAG(
-    'Generate_Dags',
+    'Generate_Dags_v2',
     default_args={
         'owner': 'airflow',
         'depends_on_past': False,
