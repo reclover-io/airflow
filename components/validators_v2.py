@@ -584,7 +584,7 @@ def validate_input_task_manual(default_emails,csv_sep="|", **context):
         dag_run = context['dag_run']
         conf = dag_run.conf
         run_ids = conf.get('run_id')
-        csv_delimiter = conf.get('csv_delimiter',csv_sep)
+        csv_delimiter = conf.get('CSV_DELIMITER',csv_sep)
         
 
         if not conf:
@@ -673,7 +673,7 @@ def validate_input_task_manual_v2(default_emails,csv_sep="|", **context):
         dag_run = context['dag_run']
         conf = dag_run.conf
         run_ids = conf.get('run_id')
-        csv_delimiter = conf.get('csv_delimiter',csv_sep)
+        csv_delimiter = conf.get('CSV_DELIMITER',csv_sep)
         
 
         if not conf:
@@ -683,7 +683,7 @@ def validate_input_task_manual_v2(default_emails,csv_sep="|", **context):
         errors = []
         
         # เช็คว่ามี required fields ครบ 
-        required_fields = ['API_URL', 'CSV_COLUMNS', 'FTP_PATH', 'DAG_NAME', 'csvName']
+        required_fields = ['API_URL', 'CSV_COLUMNS', 'DAG_NAME', 'csvName']
         missing_fields = []
         
         if not run_ids:

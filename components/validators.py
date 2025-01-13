@@ -578,13 +578,13 @@ def validate_csv_delimiter(csv_delimiter: str) -> Tuple[bool, Optional[str]]:
 
     return False, "CSV Delimiter must be a single character"
 
-def validate_input_task_manual(default_emails, **context):
+def validate_input_task_manual(default_emails,csv_sep="|", **context):
    """Validate that required fields are present in the configuration"""
    try:
         dag_run = context['dag_run']
         conf = dag_run.conf
         run_ids = conf.get('run_id')
-        csv_delimiter = conf.get('csv_delimiter')
+        csv_delimiter = conf.get('csv_delimiter',csv_sep)
         
 
         if not conf:
@@ -666,11 +666,11 @@ def validate_input_task_manual(default_emails, **context):
            raise AirflowException(error_msg)
        raise
 
-def validate_input_task_monthly(default_csv_columns: List[str], default_emails: Dict[str, List[str]], **context):
+def validate_input_task_monthly(default_csv_columns: List[str], default_emails: Dict[str, List[str]],csv_sep="|", **context):
     """Validate input configuration using existing validate_config function"""
     try:
         dag_run = context['dag_run']
-        
+
         # Get execution date from context
         execution_date = context['execution_date']
         
@@ -690,9 +690,10 @@ def validate_input_task_monthly(default_csv_columns: List[str], default_emails: 
             print(f"Using default configuration: {default_config}")
         
         conf = dag_run.conf
+        csv_delimiter = conf.get('csv_delimiter',csv_sep)
         
         # Use existing validate_config function
-        is_valid, error_message , error_message_format = validate_config(conf, default_csv_columns, context)
+        is_valid, error_message , error_message_format = validate_config(conf, default_csv_columns, context,csv_delimiter)
         
         if not is_valid:
             context['task_instance'].xcom_push(key='error_message', value=error_message)

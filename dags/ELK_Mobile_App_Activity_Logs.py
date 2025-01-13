@@ -1,9 +1,10 @@
-
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.utils.trigger_rule import TriggerRule
 import pendulum
 from datetime import datetime, timedelta
+from croniter import croniter
+import pytz
 from components.check_previous_failed_batch import check_previous_failed_batch
 from airflow.sensors.time_sensor import TimeSensor
 from airflow.utils.timezone import utcnow
@@ -14,14 +15,18 @@ from components.notifications import (
     send_success_notification, 
     send_failure_notification
 )
-from components.process import process_data
+from components.process_v2 import process_data
 from components.constants import *
 from components.uploadtoFTP import *
-from components.validators import *
+from components.validators_v2 import *
 
 local_tz = pendulum.timezone("Asia/Bangkok")
 
-start_date = (datetime.now(local_tz) - timedelta(days=1))
+schedule_interval = "0 0 * * *"  # Adjust schedule interval as needed
+
+now = datetime.now(pendulum.timezone("Asia/Bangkok"))
+cron = croniter(schedule_interval, now)
+start_date = cron.get_prev(datetime).astimezone(local_tz)
 
 API_URL = "http://34.124.138.144:8000/mobileAppActivity"
 DAG_NAME = 'ELK_Mobile_App_Activity_Logs'
@@ -32,7 +37,12 @@ API_HEADERS = {
     'Content-Type': 'application/json'
 }
 
-csv_delimiter = '|'
+csv_delimiter = ','
+host_ftps = 'ftp://34.124.138.144:21'
+username_ftps = 'airflow'
+password_ftps = 'airflow'
+path_ftp = '/ELK/daily/source_data/landing/API_Authentication/'
+
 # Output Configuration
 OUTPUT_DIR = f'/opt/airflow/data/batch/{DAG_NAME}'
 TEMP_DIR = f'/opt/airflow/data/batch/temp'
@@ -57,7 +67,8 @@ default_args = {
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 3,
-    'retry_delay': timedelta(seconds=300)
+    'retry_delay': timedelta(seconds=1),
+    'catchup': False
 }
 
 class WaitUntilTimeSensor(BaseSensorOperator):
@@ -84,9 +95,9 @@ class WaitUntilTimeSensor(BaseSensorOperator):
 with DAG(
     DAG_NAME,
     default_args=default_args,
-    schedule_interval="0 0 * * *",
+    schedule_interval=schedule_interval,
     start_date=start_date,
-    catchup=False
+    catchup= False
 ) as dag:
     
     check_previous_fails = PythonOperator(
@@ -126,7 +137,6 @@ with DAG(
         retries=3,
         op_args=[API_URL,TEMP_DIR,OUTPUT_DIR,CONTROL_DIR,API_HEADERS,DEFAULT_CSV_COLUMNS, default_emails, slack_webhook,csv_delimiter],
         trigger_rule=TriggerRule.ONE_SUCCESS
-
     )
     
     success_notification = PythonOperator(
@@ -147,9 +157,9 @@ with DAG(
 
     uploadtoFTP = PythonOperator(
         task_id='uploadtoFTP',
-        python_callable=upload_csv_ctrl_to_ftp_server,
+        python_callable=upload_csv_ctrl_to_ftp_server_v2,
         provide_context=True,
-        op_args=[default_emails, slack_webhook],
+        op_args=[default_emails,host_ftps,username_ftps,password_ftps,path_ftp,slack_webhook],
         trigger_rule=TriggerRule.ALL_SUCCESS
         
     )

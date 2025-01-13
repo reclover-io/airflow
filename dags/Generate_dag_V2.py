@@ -31,6 +31,8 @@ from airflow.operators.python import PythonOperator
 from airflow.utils.trigger_rule import TriggerRule
 import pendulum
 from datetime import datetime, timedelta
+from croniter import croniter
+import pytz
 from components.check_previous_failed_batch import check_previous_failed_batch
 from airflow.sensors.time_sensor import TimeSensor
 from airflow.utils.timezone import utcnow
@@ -41,14 +43,17 @@ from components.notifications import (
     send_success_notification, 
     send_failure_notification
 )
-from components.process_v2 import process_data
+from components.process_v2 import *
 from components.constants import *
 from components.uploadtoFTP import *
 from components.validators_v2 import *
 
 local_tz = pendulum.timezone("Asia/Bangkok")
 
-start_date = (datetime.now(local_tz) - timedelta(days=1))
+schedule_interval = {schedule_interval}  # Adjust schedule interval as needed
+now = datetime.now(pendulum.timezone("Asia/Bangkok"))
+cron = croniter(schedule_interval, now)
+start_date = cron.get_prev(datetime).astimezone(local_tz)
 
 API_URL = "{api_url}"
 DAG_NAME = '{dag_name}'
@@ -116,7 +121,7 @@ class WaitUntilTimeSensor(BaseSensorOperator):
 with DAG(
     DAG_NAME,
     default_args=default_args,
-    schedule_interval={schedule_interval},
+    schedule_interval=schedule_interval,
     start_date=start_date,
     catchup=False
 ) as dag:
