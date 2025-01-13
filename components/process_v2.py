@@ -13,7 +13,7 @@ from components.database import (
     save_batch_state,
 )
 from components.api import fetch_data_page
-from components.file_handlers import (
+from components.file_handlers_v2 import (
     save_temp_data,
     create_control_file,
     get_output_config,
