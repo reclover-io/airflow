@@ -1,5 +1,5 @@
 from typing import Dict, Optional, List
-from sqlalchemy import text, SQLAlchemyError
+from sqlalchemy import text
 import pytz
 from datetime import datetime
 import json
@@ -158,18 +158,18 @@ def get_initial_start_time(batch_id: str, run_id: str) -> Optional[datetime]:
                 return result[0].astimezone(THAI_TZ)
         return None
 
-def delete_batch_state() -> None:
+def delete_batch_state(RETENTION_DAYS) -> None:
     """
     Delete batch states and related records from the database based on a list of .csv filenames.
     """
     try:
         with get_db_connection() as conn:
-            query = text("""
+            query = text(f"""
                 WITH
                     deleted_dag_run AS (
                         DELETE FROM dag_run
                         WHERE
-                            updated_at < (CURRENT_TIMESTAMP - INTERVAL '14 days')
+                            updated_at < (CURRENT_TIMESTAMP - INTERVAL '{RETENTION_DAYS} days')
                         RETURNING
                             dag_id,
                             run_id
@@ -182,11 +182,12 @@ def delete_batch_state() -> None:
                     )
                 DELETE FROM LOG
                 WHERE
-                    dttm < (CURRENT_TIMESTAMP - INTERVAL '14 days');
+                    dttm < (CURRENT_TIMESTAMP - INTERVAL '{RETENTION_DAYS} days');
             """)
+            print("query:",query)
             # Execute the query
             conn.execute(query)
             print("Batch states and related records deleted successfully.")
 
-    except SQLAlchemyError as e:
+    except Exception as e:
         print(f"An error occurred while deleting batch states: {str(e)}")

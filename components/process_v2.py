@@ -13,7 +13,7 @@ from components.database import (
     save_batch_state,
 )
 from components.api import fetch_data_page
-from components.file_handlers import (
+from components.file_handlers_v2 import (
     save_temp_data,
     create_control_file,
     get_output_config,
@@ -270,6 +270,8 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
                         current_page_size = total_records - fetched_count
                         records = records[:current_page_size]  # ตัดข้อมูลส่วนเกินทิ้ง
 
+
+                    print("before_headers:")
                     save_temp_data(records, temp_file_path,csv_sep,DEFAULT_CSV_COLUMNS,headers=should_write_header, columns=csv_columns)
                     should_write_header = False
                     
@@ -361,6 +363,8 @@ def fetch_and_save_data(start_date: str, end_date: str, dag_id: str, run_id: str
         )
         raise e
 
+
+
 def process_data(API_URL: str, TEMP_DIR: str, OUTPUT_DIR: str,CONTROL_DIR: str, API_HEADERS: Dict[str, str], DEFAULT_CSV_COLUMNS: List[str], default_emails: Dict[str, List[str]], slack_webhook: Optional[str] = None,csv_sep='|', **kwargs):
     """Process the data and handle notifications""" 
     try:
@@ -374,137 +378,7 @@ def process_data(API_URL: str, TEMP_DIR: str, OUTPUT_DIR: str,CONTROL_DIR: str, 
         start_date = conf.get('startDate')
         end_date = conf.get('endDate')
         run_id = dag_run.run_id
-        csv_sep = conf.get('csv_delimiter', csv_sep)
-        batch_state = get_batch_state(dag_run.dag_id, run_id)
-        if batch_state:
-            total_records = batch_state.get('total_records')
-            fetched_records = batch_state.get('fetched_records')
-
-            if fetched_records == total_records:
-                print(f"Batch {run_id} was already completed successfully. Skipping process_data.")
-
-                # ดึงข้อมูลไฟล์เดิม
-                csv_filename = batch_state.get('csv_filename')
-                control_filename = batch_state.get('ctrl_filename')
-                csv_path = os.path.join(OUTPUT_DIR, f"{csv_filename}")
-                control_path = os.path.join(OUTPUT_DIR, f"{control_filename}")
-
-                if csv_filename and control_filename:
-                    # ส่งค่าที่จำเป็นผ่าน XCom
-                    ti.xcom_push(key='output_filename', value=csv_filename)
-                    ti.xcom_push(key='control_filename', value=control_filename)
-                    # ส่งค่าpath และ filename กลับเหมือนการทำงานปกติ
-                    return (csv_path, csv_filename, control_path, control_filename)
-                    
-                else:
-                    error_msg = f"Batch {run_id} is marked as COMPLETED but missing file information"
-                    ti.xcom_push(key='error_message', value=error_msg)
-                    raise AirflowException(error_msg)
-        
-        print(f"Processing with parameters: start_date={start_date}, "
-              f"end_date={end_date}, run_id={run_id}")
-        
-        # Store start time
-        ti.xcom_push(key='batch_start_time', value=get_thai_time().isoformat())
-        
-        try:
-            
-            result = fetch_and_save_data(
-                start_date=start_date,
-                end_date=end_date,
-                dag_id=dag_run.dag_id,
-                run_id=run_id,
-                conf=conf,
-                API_URL=API_URL,
-                TEMP_DIR=TEMP_DIR,
-                OUTPUT_DIR=OUTPUT_DIR,
-                DEFAULT_CSV_COLUMNS=DEFAULT_CSV_COLUMNS,
-                API_HEADERS=API_HEADERS,
-                csv_sep=csv_sep
-
-            )
-            
-            if isinstance(result, dict) and result.get('status') == 'paused':
-                return result
-            
-            output_path, csv_filename = result
-            batch_state = get_batch_state(dag_run.dag_id, run_id)
-            csv_filename_final = batch_state.get('csv_filename')
-            ctrl_filename_final = batch_state.get('ctrl_filename')    
-            ti.xcom_push(key='output_filename', value=csv_filename_final)
-            ti.xcom_push(key='control_filename', value=ctrl_filename_final)
-            
-            total_records = batch_state.get('total_records', 0) if batch_state else 0
-            
-            # Create control file
-            control_path, control_filename = create_control_file(
-                start_date=start_date,
-                total_records=total_records,
-                csv_filename=csv_filename_final,
-                ctrl_filename=ctrl_filename_final,
-                dag_id=dag_run.dag_id,
-                conf=conf,
-                CONTROL_DIR=CONTROL_DIR,
-                csv_sep=csv_sep
-            )
-            
-            return (output_path, csv_filename_final, control_path, ctrl_filename_final)
-            
-        except Exception as e:
-            error_msg = str(e)
-            ti.xcom_push(key='error_message', value=error_msg)
-            try_number = ti.try_number
-            max_retries = ti.max_tries
-
-            # เพิ่มเช็คว่าเป็น SIGTERM หรือไม่
-            is_sigterm = any(msg in str(e) for msg in [
-                "Task received SIGTERM signal",
-                "Task received SIGKILL signal",
-                "Task was cancelled externally",
-                "Received SIGTERM. Terminating subprocesses",
-                "State of this instance has been externally set to failed"
-            ])
-            
-            # Send retry notification if this is not the last retry
-            if try_number <= max_retries and not is_sigterm:
-                send_retry_notification(
-                    dag_id=dag_run.dag_id,
-                    run_id=run_id,
-                    error_message=error_msg,
-                    retry_count=try_number,  # try_number starts from 1
-                    max_retries=max_retries,  # exclude the initial try
-                    conf=conf,
-                    default_emails=default_emails,
-                    slack_webhook=slack_webhook,
-                    context=kwargs
-                )
-
-            raise AirflowException(error_msg)
-        
-    except AirflowSkipException as e:
-        # Handle skipped task explicitly
-        print(e)
-        raise
-            
-    except Exception as e:
-        error_msg = str(e)
-        ti.xcom_push(key='error_message', value=error_msg)
-        raise AirflowException(error_msg)
-
-def process_data_v2(API_URL: str, TEMP_DIR: str, OUTPUT_DIR: str,CONTROL_DIR: str, API_HEADERS: Dict[str, str], DEFAULT_CSV_COLUMNS: List[str], default_emails: Dict[str, List[str]], slack_webhook: Optional[str] = None,csv_sep='|', **kwargs):
-    """Process the data and handle notifications""" 
-    try:
-        ti = kwargs['task_instance']
-        dag_run = kwargs['dag_run']
-        conf = dag_run.conf or {}
-        run_id_conf = conf.get('run_id', None)
-        if run_id_conf:
-            raise AirflowSkipException(f"Skipping notification because get run_id: {run_id_conf}")
-        
-        start_date = conf.get('startDate')
-        end_date = conf.get('endDate')
-        run_id = dag_run.run_id
-        csv_sep = conf.get('csv_delimiter', csv_sep)
+        csv_sep = conf.get('CSV_DELIMITER', csv_sep)
         batch_state = get_batch_state(dag_run.dag_id, run_id)
         if batch_state:
             total_records = batch_state.get('total_records')
@@ -644,7 +518,7 @@ def process_data_manual(API_HEADERS,default_emails,slack_webhook,csv_sep='|',**k
         OUTPUT_DIR = f'/opt/airflow/data/batch/{DAG_NAME}'
         TEMP_DIR = f'/opt/airflow/data/batch/temp'
         CONTROL_DIR = f'/opt/airflow/data/batch/{DAG_NAME}'
-        csv_sep = conf.get('csv_delimiter', csv_sep)
+        csv_sep = conf.get('CSV_DELIMITER', csv_sep)
         run_id = dag_run.run_id
         batch_state = get_batch_state(dag_run.dag_id, run_id)
         
@@ -763,6 +637,147 @@ def process_data_manual(API_HEADERS,default_emails,slack_webhook,csv_sep='|',**k
         ti.xcom_push(key='error_message', value=error_msg)
         raise AirflowException(error_msg)
 
+def process_data_manual_v2(API_HEADERS,default_emails,slack_webhook,csv_sep='|',**kwargs):
+    """Process the data and handle notifications""" 
+
+   
+    try:
+        ti = kwargs['task_instance']
+        dag_run = kwargs['dag_run']
+        conf = dag_run.conf or {}
+
+        run_id_conf = conf.get('run_id', None)
+        if run_id_conf:
+            raise AirflowSkipException(f"Skipping notification because get run_id: {run_id_conf}")
+        
+        DAG_NAME = conf.get('DAG_NAME','')
+        API_URL = conf.get('API_URL','')
+        DEFAULT_CSV_COLUMNS = conf.get('CSV_COLUMNS',[])
+        
+        start_run = conf.get('start_run','')
+        start_date = conf.get('startDate')
+        end_date = conf.get('endDate')
+        OUTPUT_DIR = f'/opt/airflow/data/batch/{DAG_NAME}'
+        TEMP_DIR = f'/opt/airflow/data/batch/temp'
+        CONTROL_DIR = f'/opt/airflow/data/batch/{DAG_NAME}'
+        csv_sep = conf.get('CSV_DELIMITER', csv_sep)
+        run_id = dag_run.run_id
+        batch_state = get_batch_state(dag_run.dag_id, run_id)
+        
+        if batch_state:
+            total_records = batch_state.get('total_records')
+            fetched_records = batch_state.get('fetched_records')
+
+            if fetched_records == total_records:
+                print(f"Batch {run_id} was already completed successfully. Skipping process_data.")
+
+                # ดึงข้อมูลไฟล์เดิม
+                csv_filename = batch_state.get('csv_filename')
+                control_filename = batch_state.get('ctrl_filename')
+                csv_path = os.path.join(OUTPUT_DIR, f"{csv_filename}")
+                control_path = os.path.join(OUTPUT_DIR, f"{control_filename}")
+
+                if csv_filename and control_filename:
+                    # ส่งค่าที่จำเป็นผ่าน XCom
+                    ti.xcom_push(key='output_filename', value=csv_filename)
+                    ti.xcom_push(key='control_filename', value=control_filename)
+                    # ส่งค่าpath และ filename กลับเหมือนการทำงานปกติ
+                    return (csv_path, csv_filename, control_path, control_filename)
+                else:
+                    error_msg = f"Batch {run_id} is marked as COMPLETED but missing file information"
+                    ti.xcom_push(key='error_message', value=error_msg)
+                    raise AirflowException(error_msg)
+        
+        print(f"Processing with parameters: start_date={start_date}, "
+              f"end_date={end_date}, run_id={run_id}")
+        
+        # Store start time
+        ti.xcom_push(key='batch_start_time', value=get_thai_time().isoformat())
+        ti.xcom_push(key='dag_name', value=DAG_NAME)
+        try:
+            
+            result = fetch_and_save_data(
+                start_date=start_date,
+                end_date=end_date,
+                dag_id=dag_run.dag_id,
+                run_id=run_id,
+                conf=conf,
+                API_URL=API_URL,
+                TEMP_DIR=TEMP_DIR,
+                OUTPUT_DIR=OUTPUT_DIR,
+                DEFAULT_CSV_COLUMNS=DEFAULT_CSV_COLUMNS,
+                API_HEADERS=API_HEADERS,
+                csv_sep=csv_sep
+
+            )
+            
+            if isinstance(result, dict) and result.get('status') == 'paused':
+                return result
+            
+            output_path, csv_filename = result
+            batch_state = get_batch_state(dag_run.dag_id, run_id)
+            csv_filename_final = batch_state.get('csv_filename')
+            ctrl_filename_final = batch_state.get('ctrl_filename') 
+            ti.xcom_push(key='output_filename', value=csv_filename_final)
+            ti.xcom_push(key='control_filename', value=ctrl_filename_final)
+            
+            total_records = batch_state.get('total_records', 0) if batch_state else 0
+            
+            # Create control file
+            control_path, control_filename = create_control_file(
+                start_date=start_date,
+                total_records=total_records,
+                csv_filename=csv_filename_final,
+                ctrl_filename=ctrl_filename_final,
+                dag_id=dag_run.dag_id,
+                conf=conf,
+                CONTROL_DIR=CONTROL_DIR,
+                csv_sep=csv_sep
+            )
+            
+            return (output_path, csv_filename_final, control_path, ctrl_filename_final)
+            
+        except Exception as e:
+            error_msg = str(e)
+            ti.xcom_push(key='error_message', value=error_msg)
+            try_number = ti.try_number
+            max_retries = ti.max_tries
+
+            # เพิ่มเช็คว่าเป็น SIGTERM หรือไม่
+            is_sigterm = any(msg in str(e) for msg in [
+                "Task received SIGTERM signal",
+                "Task received SIGKILL signal",
+                "Task was cancelled externally",
+                "Received SIGTERM. Terminating subprocesses",
+                "State of this instance has been externally set to failed"
+            ])
+            
+            # Send retry notification if this is not the last retry
+            if try_number <= max_retries and not is_sigterm:
+                send_retry_notification(
+                    dag_id=dag_run.dag_id,
+                    run_id=run_id,
+                    error_message=error_msg,
+                    retry_count=try_number,  # try_number starts from 1
+                    max_retries=max_retries,  # exclude the initial try
+                    conf=conf,
+                    default_emails=default_emails,
+                    slack_webhook=slack_webhook,
+                    context=kwargs
+                )
+
+            raise AirflowException(error_msg)
+        
+    except AirflowSkipException as e:
+        # Handle skipped task explicitly
+        print(e)
+        raise
+
+
+    except Exception as e:
+        error_msg = str(e)
+        ti.xcom_push(key='error_message', value=error_msg)
+        raise AirflowException(error_msg)
 
 
 def check_pause_status(**context):

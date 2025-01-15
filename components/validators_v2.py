@@ -584,7 +584,7 @@ def validate_input_task_manual(default_emails,csv_sep="|", **context):
         dag_run = context['dag_run']
         conf = dag_run.conf
         run_ids = conf.get('run_id')
-        csv_delimiter = conf.get('csv_delimiter',csv_sep)
+        csv_delimiter = conf.get('CSV_DELIMITER',csv_sep)
         
 
         if not conf:
@@ -595,6 +595,95 @@ def validate_input_task_manual(default_emails,csv_sep="|", **context):
         
         # เช็คว่ามี required fields ครบ 
         required_fields = ['API_URL', 'CSV_COLUMNS', 'FTP_PATH', 'DAG_NAME', 'csvName']
+        missing_fields = []
+        
+        if not run_ids:
+            
+            for field in required_fields:
+                if not conf.get(field):
+                    missing_fields.append(field)
+
+            if missing_fields:
+                errors.append(f"Missing required fields: {', '.join(missing_fields)}")
+
+            # เช็คว่า CSV_COLUMNS เป็น array
+            csv_columns = conf.get('CSV_COLUMNS', [])
+            if not isinstance(csv_columns, list):
+                errors.append("CSV_COLUMNS must be an array")
+            
+            # Validate dates ด้วย validate_config_dates
+            is_valid, error_message = validate_config_dates(conf)
+            if not is_valid:
+                # แยก error messages ที่ได้จาก validate_config_dates ออกเป็นข้อๆ
+                date_errors = error_message.split('\n')
+                errors.extend(date_errors)
+
+            is_valid, error_message = validate_ftp_config(conf, context)
+            if not is_valid:
+                errors.append(f"FTP Configuration Error: {error_message}")
+
+
+        if run_ids:
+            is_valid, error_message = validate_run_ids(run_ids, context['dag'].dag_id)
+            if not is_valid:
+                errors.append(f"Invalid run_ids: {error_message}")
+
+        start_run = conf.get('start_run')
+        if start_run:
+            is_valid, error_message = validate_start_run(start_run)
+            if not is_valid:
+                errors.append(f"{error_message}")
+
+        if csv_delimiter:
+            is_valid, error_message = validate_csv_delimiter(csv_delimiter)
+            if not is_valid:
+                errors.append(f"{error_message}")
+
+        if errors:
+            # กรองออกข้อที่เป็นค่าว่าง
+            errors = [error for error in errors if error.strip()]
+            
+            error_message = "Configuration Validation Failed:<ol>"
+            for error in errors:
+                error_message += f"<li>{error}</li>"
+            error_message += "</ol>"
+
+            error_message_format = "Configuration Validation Failed:\n\n"
+            for i, error in enumerate(errors, 1):
+                error_message_format += f"{i}. {error}\n"
+
+            context['task_instance'].xcom_push(key='error_message', value=error_message)
+            raise AirflowException(error_message_format)
+
+       # Push validation result to XCom
+        ti = context['task_instance']
+        ti.xcom_push(key='validation_result', value=True)
+
+   except Exception as e:
+       if not isinstance(e, AirflowException):
+           error_msg = f"Unexpected error during validation: {str(e)}"
+           context['task_instance'].xcom_push(key='error_message', value=error_msg)
+           raise AirflowException(error_msg)
+       raise
+   
+
+def validate_input_task_manual_v2(default_emails,csv_sep="|", **context):
+   """Validate that required fields are present in the configuration"""
+   try:
+        dag_run = context['dag_run']
+        conf = dag_run.conf
+        run_ids = conf.get('run_id')
+        csv_delimiter = conf.get('CSV_DELIMITER',csv_sep)
+        
+
+        if not conf:
+            raise AirflowException("Configuration is required")
+
+        # เก็บ errors ไว้ในรูปแบบ list
+        errors = []
+        
+        # เช็คว่ามี required fields ครบ 
+        required_fields = ['API_URL', 'CSV_COLUMNS', 'DAG_NAME', 'csvName']
         missing_fields = []
         
         if not run_ids:
@@ -690,10 +779,10 @@ def validate_input_task_monthly(default_csv_columns: List[str], default_emails: 
             print(f"Using default configuration: {default_config}")
         
         conf = dag_run.conf
-        csv_delimiter = conf.get('csv_delimiter',csv_sep)
+
         
         # Use existing validate_config function
-        is_valid, error_message , error_message_format = validate_config(conf, default_csv_columns, context,csv_delimiter)
+        is_valid, error_message , error_message_format = validate_config(conf, default_csv_columns, context,csv_sep)
         
         if not is_valid:
             context['task_instance'].xcom_push(key='error_message', value=error_message)

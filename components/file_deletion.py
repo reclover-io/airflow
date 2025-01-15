@@ -60,5 +60,5 @@ def delete_old_batch_files():
 
         check_and_log_if_empty(base_dir)
 
-    delete_batch_state()
+    delete_batch_state(RETENTION_DAYS)
     delete_file(file_path_list)

@@ -3,22 +3,21 @@ from airflow.operators.python import PythonOperator
 from airflow.utils.trigger_rule import TriggerRule
 from airflow.sensors.base import BaseSensorOperator
 from datetime import datetime, timedelta
-from components.check_previous_failed_batch import check_previous_failed_batch
+from components.check_previous_failed_batch_v2 import check_previous_failed_batch
 from components.notifications import (
     send_running_notification,
     send_success_notification, 
     send_failure_notification
 )
-from components.process import process_data_manual
+from components.process_v2 import *
 from components.constants import *
 from components.uploadtoFTP import *
-from components.validators import validate_input_task_manual
+from components.validators_v2 import *
 
 API_HEADERS = {
     'Authorization': 'R2pDZVNaRUJnMmt1a0tEVE5raEo6ZTNrYm1WRk1Sb216UGUtU21DS21iZw==',
     'Content-Type': 'application/json'
 }
-
 slack_webhook=""
 default_args = {
     'owner': 'airflow',
@@ -30,6 +29,10 @@ default_args = {
 }
 
 csv_delimiter = '|'
+host_ftps = 'ftp://34.124.138.144:21'
+username_ftps = 'airflow'
+password_ftps = 'airflow'
+path_ftp = '/ELK/daily/source_data/landing/ELK_Mobile_App_Activity_Logs'
 
 default_emails = {
     'email': ['chadaphon.t@extosoft.com','aruethai.c@extosoft.com'],
@@ -63,7 +66,7 @@ class WaitUntilTimeSensor(BaseSensorOperator):
             self.log.info("No start_run provided in dag_run configuration.")
             return True
 
-DAG_NAME="Manual_Run"
+DAG_NAME="Manual_Run_v2"
 # Create the DAG
 with DAG(
     DAG_NAME,
@@ -81,8 +84,8 @@ with DAG(
     )
         
     validate_input = PythonOperator(
-        task_id='validate_input_task_manual',
-        python_callable=validate_input_task_manual,
+        task_id='validate_input_task_manual_v2',
+        python_callable=validate_input_task_manual_v2,
         provide_context=True,
         retries=0,
         op_args=[default_emails,csv_delimiter]
@@ -107,7 +110,7 @@ with DAG(
 
     process_task = PythonOperator(
         task_id='process_data',
-        python_callable=process_data_manual,
+        python_callable=process_data_manual_v2,
         provide_context=True,
         retries=3,
         op_args=[API_HEADERS,default_emails,slack_webhook,csv_delimiter],
@@ -132,9 +135,9 @@ with DAG(
 
     uploadtoFTP = PythonOperator(
         task_id='uploadtoFTP',
-        python_callable=upload_csv_ctrl_to_ftp_server_manual,
+        python_callable=upload_csv_ctrl_to_ftp_server_manual_v2,
         provide_context=True,
-        op_args=[default_emails],
+        op_args=[default_emails, host_ftps, username_ftps, password_ftps, path_ftp, slack_webhook],
         trigger_rule=TriggerRule.ALL_SUCCESS,
     )
 

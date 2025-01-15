@@ -19,6 +19,11 @@ def create_dag_file(**kwargs):
     emailPause = config.get('EMAIL_PAUSE', [])
     emailResume = config.get('EMAIL_RESUME', [])
     emailStart = config.get('EMAIL_START', [])
+    csv_delimiter = config.get('CSV_DELIMITER','|')
+    host_ftps = config.get('HOST_FTPS','ftps://10.250.1.101:990')
+    username_ftps = config.get('USERNAME_FTPS','elk_ftps')
+    password_ftps = config.get('PASSWORD_FTPS','password@1')
+    path_ftp = config.get('PATH_FTP','/ELK/daily/source_data/landing/API_Authentication/')
     # Template ของ DAG ใหม่ที่เหมือนกับ Friend_MB_Noti_Spending.py
     dag_content = f"""
 from airflow import DAG
@@ -38,10 +43,10 @@ from components.notifications import (
     send_success_notification, 
     send_failure_notification
 )
-from components.process import process_data
+from components.process_v2 import *
 from components.constants import *
 from components.uploadtoFTP import *
-from components.validators import *
+from components.validators_v2 import *
 
 local_tz = pendulum.timezone("Asia/Bangkok")
 
@@ -59,6 +64,11 @@ API_HEADERS = {{
     'Content-Type': 'application/json'
 }}
 
+csv_delimiter = '{csv_delimiter}'
+host_ftps = '{host_ftps}'
+username_ftps = '{username_ftps}'
+password_ftps = '{password_ftps}'
+path_ftp = '{path_ftp}'
 
 # Output Configuration
 OUTPUT_DIR = f'/opt/airflow/data/batch/{{DAG_NAME}}'
@@ -128,7 +138,7 @@ with DAG(
         python_callable=validate_input_task,
         provide_context=True,
         retries=1,
-        op_args=[DEFAULT_CSV_COLUMNS, default_emails]
+        op_args=[DEFAULT_CSV_COLUMNS, default_emails,csv_delimiter]
     )
 
     wait_for_start_time = WaitUntilTimeSensor(
@@ -151,9 +161,8 @@ with DAG(
         python_callable=process_data,
         provide_context=True,
         retries=3,
-        op_args=[API_URL,TEMP_DIR,OUTPUT_DIR,CONTROL_DIR,API_HEADERS,DEFAULT_CSV_COLUMNS, default_emails, slack_webhook],
+        op_args=[API_URL,TEMP_DIR,OUTPUT_DIR,CONTROL_DIR,API_HEADERS,DEFAULT_CSV_COLUMNS, default_emails, slack_webhook,csv_delimiter],
         trigger_rule=TriggerRule.ONE_SUCCESS
-
     )
     
     success_notification = PythonOperator(
@@ -174,9 +183,9 @@ with DAG(
 
     uploadtoFTP = PythonOperator(
         task_id='uploadtoFTP',
-        python_callable=upload_csv_ctrl_to_ftp_server,
+        python_callable=upload_csv_ctrl_to_ftp_server_v2,
         provide_context=True,
-        op_args=[default_emails,slack_webhook],
+        op_args=[default_emails,host_ftps,username_ftps,password_ftps,path_ftp,slack_webhook],
         trigger_rule=TriggerRule.ALL_SUCCESS
         
     )
@@ -200,7 +209,7 @@ with DAG(
 
 # สร้าง DAG หลัก
 with DAG(
-    'Generate_Dags',
+    'Generate_Dags_v2',
     default_args={
         'owner': 'airflow',
         'depends_on_past': False,

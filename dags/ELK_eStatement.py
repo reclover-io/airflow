@@ -1,28 +1,5 @@
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from airflow.utils.dates import days_ago
-from datetime import timedelta
-
-
-
-# ฟังก์ชันสำหรับสร้างไฟล์ DAG ใหม่
-def create_dag_file(**kwargs):
-    config = kwargs['dag_run'].conf  # รับค่าคอนฟิกจากการรัน
-    api_url = config.get('API_URL', 'http://default.api/url')
-    dag_name = config.get('DAG_NAME', 'default_dag_name')
-    csv_columns = config.get('DEFAULT_CSV_COLUMNS', ['col1', 'col2', 'col3'])
-    authorization = config.get('AUTHORIZATION', 'default_authorization_token')
-    schedule_interval = config.get('SCHEDULE_INTERVAL', None)
-    email = config.get('EMAIL', [])
-    emailSuccess = config.get('EMAIL_SUCCESS', [])
-    emailFail = config.get('EMAIL_FAIL', [])
-    emailPause = config.get('EMAIL_PAUSE', [])
-    emailResume = config.get('EMAIL_RESUME', [])
-    emailStart = config.get('EMAIL_START', [])
-    # Template ของ DAG ใหม่ที่เหมือนกับ Friend_MB_Noti_Spending.py
-    dag_content = f"""
-from airflow import DAG
-from airflow.operators.python import PythonOperator
 from airflow.utils.trigger_rule import TriggerRule
 import pendulum
 from datetime import datetime, timedelta
@@ -38,56 +15,65 @@ from components.notifications import (
     send_success_notification, 
     send_failure_notification
 )
-from components.process import process_data
+from components.process import process_data, check_pause_status
 from components.constants import *
 from components.uploadtoFTP import *
 from components.validators import *
+from components.check_previous_failed_batch import check_previous_failed_batch
 
+API_URL = "http://34.124.138.144:8000/mobileAppActivity"
+DAG_NAME = 'ELK_eStatement'
+
+# API Configuration
+API_HEADERS = {
+    'Authorization': 'R2pDZVNaRUJnMmt1a0tEVE5raEo6ZTNrYm1WRk1Sb216UGUtU21DS21iZw==',
+    'Content-Type': 'application/json'
+}
 local_tz = pendulum.timezone("Asia/Bangkok")
 
-schedule_interval = {schedule_interval}  # Adjust schedule interval as needed
+csv_delimiter = '|'
+host_ftps = 'ftps://10.250.1.101:990'
+username_ftps = 'elk_ftps'
+password_ftps = 'password@1'
+path_ftp = '/ELK/daily/source_data/landing/API_Authentication/'
+
+schedule_interval = "0 0 10 * *"  # Adjust schedule interval as needed
 now = datetime.now(pendulum.timezone("Asia/Bangkok"))
 cron = croniter(schedule_interval, now)
 start_date = cron.get_prev(datetime).astimezone(local_tz)
 
-API_URL = "{api_url}"
-DAG_NAME = '{dag_name}'
-
-# API Configuration
-API_HEADERS = {{
-    'Authorization': '{authorization}',
-    'Content-Type': 'application/json'
-}}
-
 
 # Output Configuration
-OUTPUT_DIR = f'/opt/airflow/data/batch/{{DAG_NAME}}'
+OUTPUT_DIR = f'/opt/airflow/data/batch/{DAG_NAME}'
 TEMP_DIR = f'/opt/airflow/data/batch/temp'
-CONTROL_DIR = f'/opt/airflow/data/batch/{{DAG_NAME}}'
+CONTROL_DIR = f'/opt/airflow/data/batch/{DAG_NAME}'
 slack_webhook = ""
 
-default_emails = {{
-    'email': {email},
-    'emailSuccess': {emailSuccess},
-    'emailFail': {emailFail},
-    'emailPause': {emailPause},
-    'emailResume': {emailResume},
-    'emailStart': {emailStart}
-}}
+default_emails = {
+    'email': ['aruethai.c@extosoft.com','phurinatkantapayao2@gmail.com'],
+    'emailSuccess': [],
+    'emailFail': [],
+    'emailPause': [],
+    'emailResume': [],
+    'emailStart': []
+}
 
-DEFAULT_CSV_COLUMNS = {csv_columns}
+DEFAULT_CSV_COLUMNS = ['RequestID', 'UserToken', 'Path', 'CounterCode', 'Status', 'RequestDateTime']
 
 # Default arguments for the DAG
-default_args = {{
+default_args = {
     'owner': 'airflow',
     'depends_on_past': False,
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 3,
-    'retry_delay': timedelta(seconds=300)
-}}
+    'retry_delay': timedelta(seconds=1)
+}
 
 class WaitUntilTimeSensor(BaseSensorOperator):
+    """
+    Custom sensor to wait until a specific datetime.
+    """
 
     def poke(self, context):
         dag_run_conf = context.get("dag_run").conf
@@ -101,7 +87,7 @@ class WaitUntilTimeSensor(BaseSensorOperator):
             # Get the current time in Bangkok timezone
             now = datetime.now(bangkok_tz)
 
-            self.log.info(f"Waiting until {{target_time}}, current time is {{now}}")
+            self.log.info(f"Waiting until {target_time}, current time is {now}")
             return now >= target_time
         else:
             self.log.info("No start_run provided in dag_run configuration.")
@@ -112,6 +98,7 @@ with DAG(
     DAG_NAME,
     default_args=default_args,
     schedule_interval=schedule_interval,
+    #schedule_interval=None,
     start_date=start_date,
     catchup=False
 ) as dag:
@@ -124,11 +111,11 @@ with DAG(
     )
     
     validate_input = PythonOperator(
-        task_id='validate_input',
-        python_callable=validate_input_task,
+        task_id='validate_input_task_monthly',
+        python_callable=validate_input_task_monthly,
         provide_context=True,
-        retries=1,
-        op_args=[DEFAULT_CSV_COLUMNS, default_emails]
+        retries=0,
+        op_args=[DEFAULT_CSV_COLUMNS, default_emails,csv_delimiter]
     )
 
     wait_for_start_time = WaitUntilTimeSensor(
@@ -151,9 +138,8 @@ with DAG(
         python_callable=process_data,
         provide_context=True,
         retries=3,
-        op_args=[API_URL,TEMP_DIR,OUTPUT_DIR,CONTROL_DIR,API_HEADERS,DEFAULT_CSV_COLUMNS, default_emails, slack_webhook],
+        op_args=[API_URL,TEMP_DIR,OUTPUT_DIR,CONTROL_DIR,API_HEADERS,DEFAULT_CSV_COLUMNS, default_emails, slack_webhook,csv_delimiter],
         trigger_rule=TriggerRule.ONE_SUCCESS
-
     )
     
     success_notification = PythonOperator(
@@ -174,50 +160,17 @@ with DAG(
 
     uploadtoFTP = PythonOperator(
         task_id='uploadtoFTP',
-        python_callable=upload_csv_ctrl_to_ftp_server,
+        python_callable=upload_csv_ctrl_to_ftp_server_v2,
         provide_context=True,
-        op_args=[default_emails,slack_webhook],
+        op_args=[default_emails,host_ftps,username_ftps,password_ftps,path_ftp,slack_webhook],
         trigger_rule=TriggerRule.ALL_SUCCESS
-        
     )
     
     # Define Dependencies
     # check_previous_fails >> validate_input >> [running_notification, failure_notification]
+
     validate_input >> [running_notification, failure_notification]
     validate_input >> wait_for_start_time >> check_previous_fails >> [running_notification, process_task, failure_notification]
     process_task >> [uploadtoFTP, failure_notification]
     uploadtoFTP >> [success_notification, failure_notification]
     process_task >> success_notification
-"""
-
-
-
-    # สร้างไฟล์ DAG ใหม่
-    dag_file_path = f"/opt/airflow/dags/{dag_name}.py"
-    with open(dag_file_path, 'w') as f:
-        f.write(dag_content)
-    print(f"DAG file created at {dag_file_path}")
-
-# สร้าง DAG หลัก
-with DAG(
-    'Generate_Dags',
-    default_args={
-        'owner': 'airflow',
-        'depends_on_past': False,
-        'email_on_failure': False,
-        'email_on_retry': False,
-        'retries': 3,
-        'retry_delay': timedelta(seconds=1)
-    },
-    schedule_interval=None,
-    start_date=days_ago(1),
-    catchup=False
-) as dag:
-
-    generate_dag_task = PythonOperator(
-        task_id='generate_dag_file',
-        python_callable=create_dag_file,
-        provide_context=True
-    )
-
-
