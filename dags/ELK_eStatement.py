@@ -30,12 +30,14 @@ API_HEADERS = {
     'Content-Type': 'application/json'
 }
 local_tz = pendulum.timezone("Asia/Bangkok")
-
+# host_ftps = 'ftps://10.250.1.101:990'
+# username_ftps = 'elk_ftps'
+# password_ftps = 'password@1'
 csv_delimiter = '|'
-host_ftps = 'ftps://10.250.1.101:990'
-username_ftps = 'elk_ftps'
-password_ftps = 'password@1'
-path_ftp = '/ELK/daily/source_data/landing/API_Authentication/'
+host_ftps = 'ftp://34.124.138.144'
+username_ftps = 'airflow'
+password_ftps = 'airflow'
+path_ftp = '/ELK/daily/source_data/landing/ELK_eStatement/'
 
 schedule_interval = "0 0 10 * *"  # Adjust schedule interval as needed
 now = datetime.now(pendulum.timezone("Asia/Bangkok"))
@@ -50,7 +52,7 @@ CONTROL_DIR = f'/opt/airflow/data/batch/{DAG_NAME}'
 slack_webhook = ""
 
 default_emails = {
-    'email': ['aruethai.c@extosoft.com','phurinatkantapayao2@gmail.com'],
+    'email': ['aruethai.c@gmail.com','phurinatkantapayao2@gmail.com'],
     'emailSuccess': [],
     'emailFail': [],
     'emailPause': [],
@@ -98,7 +100,6 @@ with DAG(
     DAG_NAME,
     default_args=default_args,
     schedule_interval=schedule_interval,
-    #schedule_interval=None,
     start_date=start_date,
     catchup=False
 ) as dag:
@@ -160,7 +161,7 @@ with DAG(
 
     uploadtoFTP = PythonOperator(
         task_id='uploadtoFTP',
-        python_callable=upload_csv_ctrl_to_ftp_server_v2,
+        python_callable=upload_csv_ctrl_to_ftp_server_monthly_v2,
         provide_context=True,
         op_args=[default_emails,host_ftps,username_ftps,password_ftps,path_ftp,slack_webhook],
         trigger_rule=TriggerRule.ALL_SUCCESS

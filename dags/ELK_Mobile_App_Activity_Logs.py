@@ -41,7 +41,7 @@ csv_delimiter = ','
 host_ftps = 'ftp://34.124.138.144:21'
 username_ftps = 'airflow'
 password_ftps = 'airflow'
-path_ftp = '/ELK/daily/source_data/landing/API_Authentication/'
+path_ftp = '/ELK/daily/source_data/landing/ELK_Mobile_App_Activity_Logs/'
 
 # Output Configuration
 OUTPUT_DIR = f'/opt/airflow/data/batch/{DAG_NAME}'
